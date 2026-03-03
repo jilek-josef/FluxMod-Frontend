@@ -33,6 +33,12 @@ export default function App() {
     setIsAuthLoading(true);
 
     try {
+      // Auto-login for localhost development
+      if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        setUser({ id: "1234", username: "Localhost User" });
+        return;
+      }
+
       const response = await fetch(`${backendUrl}/api/me`, {
         credentials: "include",
       });

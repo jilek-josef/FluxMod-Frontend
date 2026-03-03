@@ -77,7 +77,7 @@ export default function ContributorsPage() {
 
   return (
     <section className="page-card">
-      <h2>Contributors</h2>
+      <h2>Contributors</h2><br/>
       <p className="muted">People helping build FluxMod.</p>
 
       {errorMessage ? (

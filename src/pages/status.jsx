@@ -110,12 +110,10 @@ export default function StatusPage() {
         <p className="muted">{group}</p>
       </section>
 
-      <section
-        className="page-card"
-        style={{ width: "min(860px, 100%)", textAlign: "center" }}
-      >
+      <section className="page-card" style={{ width: "min(860px, 100%)", textAlign: "center" }}>
         <p className="muted">Try going back to the homepage.</p>
         <p>
+          <br/>
           <Link className="nav-link active" to="/">
             Go Home
           </Link>
