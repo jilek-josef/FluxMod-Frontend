@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import "../Styles/navbar.css";
 
 const links = [
@@ -15,7 +15,9 @@ export default function AppLayout({
   onLogin,
   onLogout,
 }) {
+  const location = useLocation();
   const username = user?.username || user?.id || "User";
+  const isDashboardRoute = location.pathname.startsWith("/dashboard");
 
   return (
     <div className="app-shell">
@@ -79,7 +81,9 @@ export default function AppLayout({
         </nav>
       </header>
 
-      <main className="content">{children}</main>
+      <main className={`content ${isDashboardRoute ? "content-fluid" : ""}`.trim()}>
+        {children}
+      </main>
     </div>
   );
 }

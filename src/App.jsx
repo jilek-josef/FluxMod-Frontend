@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import HomePage from "./pages/HomePage";
 import DashboardPage from "./pages/DashboardPage";
+import GuildDashboardPage from "./pages/GuildDashboardPage";
 import InfoPage from "./pages/InfoPage";
 import ContributorsPage from "./pages/ContributorsPage";
 import StatusPage from "./pages/status";
@@ -22,6 +23,22 @@ function DashboardRoute({ isAuthLoading, isAuthenticated, user }) {
   }
 
   return <DashboardPage user={user} />;
+}
+
+function GuildDashboardRoute({ isAuthLoading, isAuthenticated, user }) {
+  if (isAuthLoading) {
+    return (
+      <section className="page-card">
+        <p className="muted">Checking session...</p>
+      </section>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <GuildDashboardPage user={user} />;
 }
 
 export default function App() {
@@ -142,6 +159,16 @@ export default function App() {
           path="/dashboard"
           element={
             <DashboardRoute
+              isAuthLoading={isAuthLoading}
+              isAuthenticated={isAuthenticated}
+              user={user}
+            />
+          }
+        />
+        <Route
+          path="/dashboard/guild"
+          element={
+            <GuildDashboardRoute
               isAuthLoading={isAuthLoading}
               isAuthenticated={isAuthenticated}
               user={user}

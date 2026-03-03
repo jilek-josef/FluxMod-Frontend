@@ -2,14 +2,16 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import "../Styles/dashboard.css";
 import "../Styles/defaults.css";
+import Default from"./static-imgs/default.png";
 
 export default function DashboardPage({ user }) {
   const navigate = useNavigate();
   const username = user?.username || user?.id || "User";
+  const currentUserId = String(user?.id || "");
   const guilds = Array.isArray(user?.guilds) ? user.guilds : [];
 
-  const DEFAULT_USER_PFP = "/images/default-user.png"; // fallback avatar
-  const DEFAULT_GUILD_ICON = "/images/default-guild.png"; // fallback guild icon
+  const DEFAULT_USER_PFP = Default; // fallback avatar
+  const DEFAULT_GUILD_ICON = Default; // fallback guild icon
 
   const getGuildId = (guild) =>
     guild?.id || guild?.guild_id || guild?.guildId || guild?.discord_id || "";
@@ -17,25 +19,54 @@ export default function DashboardPage({ user }) {
   const getGuildName = (guild) =>
     guild?.name || guild?.guild_name || guild?.guildName || "Unnamed Guild";
 
+  const isGuildOwner = (guild) => {
+    const ownerId = String(
+      guild?.owner_id || guild?.ownerId || guild?.guild_owner_id || guild?.guildOwnerId || ""
+    );
+
+    return Boolean(ownerId) && Boolean(currentUserId) && ownerId === currentUserId;
+  };
+
+  const hasAdministratorPermission = (guild) => {
+    const rawPermissions = guild?.permissions ?? guild?.permissions_raw ?? guild?.permissionBits;
+    if (rawPermissions === undefined || rawPermissions === null) {
+      return false;
+    }
+
+    try {
+      const permissions = BigInt(rawPermissions);
+      const ADMINISTRATOR = 0x8n;
+      return (permissions & ADMINISTRATOR) === ADMINISTRATOR;
+    } catch {
+      const permissions = Number(rawPermissions);
+      const ADMINISTRATOR = 0x8;
+      return Number.isFinite(permissions) && (permissions & ADMINISTRATOR) === ADMINISTRATOR;
+    }
+  };
+
   const getGuildIconUrl = (guild) => {
     const guildId = getGuildId(guild);
-    if (!guild || !guildId) return "/images/default-guild.png";
-    if (guild.icon) {
-        const isAnimated = guild.icon.startsWith("a_");
+    const guildIcon = String(guild?.icon || "").trim();
+
+    if (!guild || !guildId) return DEFAULT_GUILD_ICON;
+    if (!guildIcon || guildIcon.toLowerCase() === "none") return DEFAULT_GUILD_ICON;
+
+    if (guildIcon) {
+      const isAnimated = guildIcon.startsWith("a_");
         const format = isAnimated ? "gif" : "png";
-        return `https://fluxerusercontent.com/icons/${guildId}/${guild.icon}.${format}`;
+      return `https://fluxerusercontent.com/icons/${guildId}/${guildIcon}.${format}`;
     }
-    return "/images/default-guild.png"; // fallback
+    return DEFAULT_GUILD_ICON;
     };
 
   const getUserPfpUrl = (user) => {
-    if (!user || !user.id) return "/images/default-user.png";
+    if (!user || !user.id) return DEFAULT_USER_PFP;
     if (user.avatar_url) {
         const isAnimated = user.avatar_url.startsWith("a_");
         const format = isAnimated ? "gif" : "png";
         return `https://fluxerusercontent.com/avatars/${user.id}/${user.avatar_url}.${format}`;
     }
-    return "/images/default-user.png"; // fallback
+    return DEFAULT_USER_PFP; // fallback
     };
 
   const handleGuildClick = (guildId) => {
@@ -45,6 +76,19 @@ export default function DashboardPage({ user }) {
 
     navigate(`/dashboard/guild?guild_id=${encodeURIComponent(guildId)}`);
   };
+
+  const sortedGuilds = guilds
+    .map((guild, originalIndex) => {
+      const canOpenGuild = isGuildOwner(guild) || hasAdministratorPermission(guild);
+      return { guild, originalIndex, canOpenGuild };
+    })
+    .sort((left, right) => {
+      if (left.canOpenGuild === right.canOpenGuild) {
+        return left.originalIndex - right.originalIndex;
+      }
+
+      return left.canOpenGuild ? -1 : 1;
+    });
 
   return (
     <section className="dashboard">
@@ -73,24 +117,6 @@ export default function DashboardPage({ user }) {
                   <span>Servers</span>
                 </a>
               </li>
-              <li>
-                <a href="/dashboard/settings">
-                  <i className="fa-solid fa-gear"></i>
-                  <span>Settings</span>
-                </a>
-              </li>
-            </ul>
-          </div>
-
-          <div className="nav-section">
-            <span className="section-title">Management</span>
-            <ul>
-              <li>
-                <a href="/dashboard/automod">
-                  <i className="fa-solid fa-robot"></i>
-                  <span>AutoMod</span>
-                </a>
-              </li>
             </ul>
           </div>
         </nav>
@@ -102,17 +128,27 @@ export default function DashboardPage({ user }) {
             <p className="subtitle">No guilds found for this account.</p>
           )}
 
-          {guilds.map((guild, index) => {
+          {sortedGuilds.map(({ guild, originalIndex, canOpenGuild }) => {
             const guildIconUrl = getGuildIconUrl(guild);
             const guildId = getGuildId(guild);
             const guildName = getGuildName(guild);
-            const guildKey = guildId || `guild-${index}`;
+            const guildKey = guildId || `guild-${originalIndex}`;
+
+            let blockedReason = "";
+            if (!canOpenGuild) {
+              blockedReason = "Owner/Admin required";
+            }
 
             return (
               <div
-                className="dashboard-card"
+                className={`dashboard-card ${canOpenGuild ? "" : "dashboard-card-disabled"}`.trim()}
                 key={guildKey}
-                onClick={() => handleGuildClick(guildId)}
+                onClick={() => {
+                  if (canOpenGuild) {
+                    handleGuildClick(guildId);
+                  }
+                }}
+                aria-disabled={!canOpenGuild}
               >
                 {guildIconUrl ? (
                   <img
@@ -129,6 +165,7 @@ export default function DashboardPage({ user }) {
                 )}
                 <h3>{guildName}</h3>
                 <p className="card-label">ID: {guildId || "Unavailable"}</p>
+                {!canOpenGuild && <p className="card-label blocked-reason">{blockedReason}</p>}
               </div>
             );
           })}
