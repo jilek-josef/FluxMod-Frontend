@@ -4,7 +4,6 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DEBUG_ENABLED = process.env.DEBUG === 'true';
-const FLUXER_VERIFY = process.env.FLUXER_VERIFY;
 
 function debugLog(scope, details) {
   if (!DEBUG_ENABLED) {
@@ -21,27 +20,6 @@ function debugLog(scope, details) {
 
 debugLog('server', { PORT, cwd: process.cwd() });
 
-function serveFluxerVerification(req, res) {
-  if (!FLUXER_VERIFY) {
-    debugLog('server', {
-      route: req.originalUrl,
-      status: 404,
-      reason: 'FLUXER_VERIFY not configured',
-    });
-    res.status(404).type('text/plain').send('FLUXER_VERIFY not configured');
-    return;
-  }
-
-  debugLog('server', {
-    route: req.originalUrl,
-    status: 200,
-    source: 'env:FLUXER_VERIFY',
-  });
-  res.type('text/plain').send(FLUXER_VERIFY);
-}
-
-app.get('/.well-known/fluxer-verification', serveFluxerVerification);
-app.get('/.well-known/fluxer-verification.txt', serveFluxerVerification);
 
 // Serve static files from the dist directory
 app.use(express.static(path.join(__dirname, 'dist')));
