@@ -4,6 +4,8 @@ import "../Styles/navbar.css";
 const links = [
   { to: "/", label: "Home", end: true },
   { to: "/info", label: "Info", end: true },
+  { to: "/terms", label: "Terms", end: true },
+  { to: "/privacy", label: "Privacy", end: true },
   { to: "/contributors", label: "Contributors", end: true },
 ];
 
