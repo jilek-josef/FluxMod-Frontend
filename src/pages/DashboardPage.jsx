@@ -118,6 +118,11 @@ export default function DashboardPage({ user }) {
                 </a>
               </li>
             </ul>
+            <span className="section-title">AutoMod Features</span>
+            <a className="sidebar-nav">
+              <i className="fa-solid fa-file-shield"></i>
+              <span>Audit Logs</span>
+            </a>
           </div>
         </nav>
       </aside>
