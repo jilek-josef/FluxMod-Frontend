@@ -6,6 +6,8 @@ import DashboardPage from "./pages/DashboardPage";
 import GuildDashboardPage from "./pages/GuildDashboardPage";
 import InfoPage from "./pages/InfoPage";
 import ContributorsPage from "./pages/ContributorsPage";
+import TermsPage from "./pages/TermsPage";
+import PrivacyPage from "./pages/PrivacyPage";
 import StatusPage from "./pages/status";
 import { getBackendUrl } from "./JS/api";
 
@@ -184,6 +186,8 @@ export default function App() {
         />
         <Route path="/info" element={<InfoPage />} />
         <Route path="/contributors" element={<ContributorsPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/status" element={<StatusPage />} />
         <Route path="/status/:code" element={<StatusPage />} />
         <Route path="*" element={<Navigate to="/status?code=404" replace />} />
