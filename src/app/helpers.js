@@ -42,6 +42,16 @@ export function normalizeRulesResponse(payload) {
   return [];
 }
 
+function pickDefinedValue(...candidates) {
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== null) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
 function pickRuleText(...candidates) {
   for (const candidate of candidates) {
     if (Array.isArray(candidate) && candidate.length > 0) {
@@ -127,45 +137,49 @@ export function normalizeAutomodSettings(payload = {}) {
     ...(source?.command_settings || source?.commandSettings || {}),
   };
 
-  const logChannelId =
-    source?.log_channel_id ||
-    source?.logChannelId ||
-    source?.automod_log_channel_id ||
-    source?.automodLogChannelId ||
-    source?.automod_log_channel ||
-    source?.automodLogChannel ||
-    source?.log_channel ||
-    source?.logChannel ||
-    commandSettings?.automod_log_channel ||
-    commandSettings?.automodLogChannel ||
-    "";
+  const logChannelId = pickDefinedValue(
+    source?.log_channel_id,
+    source?.logChannelId,
+    source?.automod_log_channel_id,
+    source?.automodLogChannelId,
+    source?.automod_log_channel,
+    source?.automodLogChannel,
+    source?.log_channel,
+    source?.logChannel,
+    commandSettings?.automod_log_channel,
+    commandSettings?.automodLogChannel,
+    ""
+  );
 
-  const exemptRoles =
-    source?.exempt_role_ids ||
-    source?.exemptRoleIds ||
-    source?.exempt_roles ||
-    source?.exemptRoles ||
-    source?.ignored_role_ids ||
-    source?.ignoredRoleIds ||
-    [];
+  const exemptRoles = pickDefinedValue(
+    source?.exempt_role_ids,
+    source?.exemptRoleIds,
+    source?.exempt_roles,
+    source?.exemptRoles,
+    source?.ignored_role_ids,
+    source?.ignoredRoleIds,
+    []
+  );
 
-  const exemptChannels =
-    source?.exempt_channel_ids ||
-    source?.exemptChannelIds ||
-    source?.exempt_channels ||
-    source?.exemptChannels ||
-    source?.ignored_channel_ids ||
-    source?.ignoredChannelIds ||
-    [];
+  const exemptChannels = pickDefinedValue(
+    source?.exempt_channel_ids,
+    source?.exemptChannelIds,
+    source?.exempt_channels,
+    source?.exemptChannels,
+    source?.ignored_channel_ids,
+    source?.ignoredChannelIds,
+    []
+  );
 
-  const exemptUsers =
-    source?.exempt_user_ids ||
-    source?.exemptUserIds ||
-    source?.exempt_users ||
-    source?.exemptUsers ||
-    source?.ignored_user_ids ||
-    source?.ignoredUserIds ||
-    [];
+  const exemptUsers = pickDefinedValue(
+    source?.exempt_user_ids,
+    source?.exemptUserIds,
+    source?.exempt_users,
+    source?.exemptUsers,
+    source?.ignored_user_ids,
+    source?.ignoredUserIds,
+    []
+  );
 
   return {
     logChannelId: String(logChannelId || "").trim(),

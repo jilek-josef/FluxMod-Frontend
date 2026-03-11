@@ -109,20 +109,6 @@ export function getBackendUrl() {
   const storageKey = `backendUrl:${origin}`;
   const isDevHost = isLocalHost(hostname);
 
-  if (isDevHost) {
-    const devBackendUrl = "http://localhost:8000";
-    const devFrontendUrl = "http://localhost:3000";
-    localStorage.setItem(storageKey, devBackendUrl);
-    localStorage.setItem("backendUrl", devBackendUrl);
-    localStorage.setItem("frontendUrl", devFrontendUrl);
-    debugLog("backend", "Using pinned localhost backend/frontend URL", {
-      storageKey,
-      devBackendUrl,
-      devFrontendUrl,
-    });
-    return devBackendUrl;
-  }
-
   const configured = normalizeBackendUrl(window.BACKEND_URL);
   if (configured) {
     debugLog("backend", "Using window.BACKEND_URL", { configured });
@@ -137,6 +123,20 @@ export function getBackendUrl() {
     localStorage.setItem(storageKey, viteConfigured);
     localStorage.setItem("backendUrl", viteConfigured);
     return viteConfigured;
+  }
+
+  if (isDevHost) {
+    const devBackendUrl = "http://localhost:8000";
+    const devFrontendUrl = "http://localhost:3000";
+    localStorage.setItem(storageKey, devBackendUrl);
+    localStorage.setItem("backendUrl", devBackendUrl);
+    localStorage.setItem("frontendUrl", devFrontendUrl);
+    debugLog("backend", "Using pinned dev backend/frontend URL", {
+      storageKey,
+      devBackendUrl,
+      devFrontendUrl,
+    });
+    return devBackendUrl;
   }
 
   const scopedSaved = normalizeBackendUrl(localStorage.getItem(storageKey));

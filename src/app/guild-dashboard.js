@@ -132,6 +132,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         exemptChannelIds: "",
         exemptUserIds: "",
       },
+      automodSettingsOriginal: {
+        logChannelId: "",
+        exemptRoleIds: "",
+        exemptChannelIds: "",
+        exemptUserIds: "",
+      },
       isLoadingSettings: false,
       isSavingSettings: false,
       keywordOverrides: {},
@@ -146,6 +152,16 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     return appState.guildDashboardState;
   }
 
+  function firstDefined(...candidates) {
+    for (const candidate of candidates) {
+      if (candidate !== undefined && candidate !== null) {
+        return candidate;
+      }
+    }
+
+    return undefined;
+  }
+
   function toRuleEditForm(rule = {}) {
     return {
       name: rule?.name || "",
@@ -155,25 +171,31 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       threshold: Math.max(1, Number(rule?.threshold || 1)),
       enabled: rule?.enabled !== false,
       exemptRoleIds: normalizeIdList(
-        rule?.exempt_roles ||
-          rule?.exempt_role_ids ||
-          rule?.exemptRoleIds ||
-          rule?.exemptRoles ||
+        firstDefined(
+          rule?.exempt_roles,
+          rule?.exempt_role_ids,
+          rule?.exemptRoleIds,
+          rule?.exemptRoles,
           []
+        )
       ),
       exemptChannelIds: normalizeIdList(
-        rule?.exempt_channels ||
-          rule?.exempt_channel_ids ||
-          rule?.exemptChannelIds ||
-          rule?.exemptChannels ||
+        firstDefined(
+          rule?.exempt_channels,
+          rule?.exempt_channel_ids,
+          rule?.exemptChannelIds,
+          rule?.exemptChannels,
           []
+        )
       ),
       exemptUserIds: normalizeIdList(
-        rule?.exempt_users ||
-          rule?.exempt_user_ids ||
-          rule?.exemptUserIds ||
-          rule?.exemptUsers ||
+        firstDefined(
+          rule?.exempt_users,
+          rule?.exempt_user_ids,
+          rule?.exemptUserIds,
+          rule?.exemptUsers,
           []
+        )
       ),
     };
   }
@@ -253,6 +275,40 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       default:
         return field;
     }
+  }
+
+  function normalizeIdSet(value) {
+    return Array.from(new Set(parseCommaSeparated(value))).sort();
+  }
+
+  function areIdListsEqual(left, right) {
+    const leftIds = normalizeIdSet(left);
+    const rightIds = normalizeIdSet(right);
+    return JSON.stringify(leftIds) === JSON.stringify(rightIds);
+  }
+
+  function didSettingsPersist(expected, actual) {
+    return (
+      String(expected.logChannelId || "").trim() === String(actual.logChannelId || "").trim() &&
+      areIdListsEqual(expected.exemptRoleIds, actual.exemptRoleIds) &&
+      areIdListsEqual(expected.exemptChannelIds, actual.exemptChannelIds) &&
+      areIdListsEqual(expected.exemptUserIds, actual.exemptUserIds)
+    );
+  }
+
+  function toComparableSettingsForm(form = {}) {
+    return {
+      logChannelId: String(form.logChannelId || "").trim(),
+      exemptRoleIds: String(form.exemptRoleIds || "").trim(),
+      exemptChannelIds: String(form.exemptChannelIds || "").trim(),
+      exemptUserIds: String(form.exemptUserIds || "").trim(),
+    };
+  }
+
+  function hasSettingsChanges(state) {
+    const current = toComparableSettingsForm(state.automodSettingsForm);
+    const original = toComparableSettingsForm(state.automodSettingsOriginal);
+    return JSON.stringify(current) !== JSON.stringify(original);
   }
 
   function canAbandonEdit(state, nextActionLabel = "continue") {
@@ -670,17 +726,13 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       return;
     }
 
-    const candidates = [
-      `${backendUrl}/api/guilds/automod-settings?guild_id=${encodeURIComponent(guildId)}`,
-      `${backendUrl}/api/guilds/settings/automod?guild_id=${encodeURIComponent(guildId)}`,
-      `${backendUrl}/api/guilds/settings?guild_id=${encodeURIComponent(guildId)}`,
-    ];
+    async function fetchNormalizedSettings() {
+      const candidates = [
+        `${backendUrl}/api/guilds/automod-settings?guild_id=${encodeURIComponent(guildId)}`,
+        `${backendUrl}/api/guilds/settings/automod?guild_id=${encodeURIComponent(guildId)}`,
+        `${backendUrl}/api/guilds/settings?guild_id=${encodeURIComponent(guildId)}`,
+      ];
 
-    state.isLoadingSettings = true;
-    state.statusMessage = "";
-    renderContent();
-
-    try {
       const isSettingsEmpty = (settings) => {
         return (
           !settings.logChannelId &&
@@ -698,14 +750,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           const payload = await response.json();
           const normalized = normalizeAutomodSettings(payload);
 
-          // Keep first successful payload as fallback, but prefer the first non-empty one.
           if (!fallbackSettings) {
             fallbackSettings = normalized;
           }
 
           if (!isSettingsEmpty(normalized)) {
-            state.automodSettingsForm = normalized;
-            return;
+            return normalized;
           }
 
           continue;
@@ -716,13 +766,23 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         }
       }
 
-      state.automodSettingsForm =
+      return (
         fallbackSettings || {
           logChannelId: "",
           exemptRoleIds: "",
           exemptChannelIds: "",
           exemptUserIds: "",
-        };
+        }
+      );
+    }
+
+    state.isLoadingSettings = true;
+    state.statusMessage = "";
+    renderContent();
+
+    try {
+      state.automodSettingsForm = await fetchNormalizedSettings();
+      state.automodSettingsOriginal = { ...state.automodSettingsForm };
     } catch (error) {
       state.statusMessage = error?.message || "Failed to load AutoMod settings.";
     } finally {
@@ -737,18 +797,79 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       return;
     }
 
+    const logChannelId = state.automodSettingsForm.logChannelId.trim();
+    const logChannelIdNullable = logChannelId || null;
+    const exemptRoleIdsCsv = state.automodSettingsForm.exemptRoleIds.trim();
+    const exemptRoleIds = parseCommaSeparated(state.automodSettingsForm.exemptRoleIds);
+    const exemptRoleIdsNullable = exemptRoleIds.length > 0 ? exemptRoleIds : null;
+    const exemptChannelIdsCsv = state.automodSettingsForm.exemptChannelIds.trim();
+    const exemptChannelIds = parseCommaSeparated(state.automodSettingsForm.exemptChannelIds);
+    const exemptChannelIdsNullable = exemptChannelIds.length > 0 ? exemptChannelIds : null;
+    const exemptUserIdsCsv = state.automodSettingsForm.exemptUserIds.trim();
+    const exemptUserIds = parseCommaSeparated(state.automodSettingsForm.exemptUserIds);
+    const exemptUserIdsNullable = exemptUserIds.length > 0 ? exemptUserIds : null;
+
     const payload = {
-      log_channel_id: state.automodSettingsForm.logChannelId.trim(),
-      automod_log_channel: state.automodSettingsForm.logChannelId.trim(),
-      exempt_role_ids: parseCommaSeparated(state.automodSettingsForm.exemptRoleIds),
-      exempt_roles: parseCommaSeparated(state.automodSettingsForm.exemptRoleIds),
-      exempt_channel_ids: parseCommaSeparated(state.automodSettingsForm.exemptChannelIds),
-      exempt_channels: parseCommaSeparated(state.automodSettingsForm.exemptChannelIds),
-      exempt_user_ids: parseCommaSeparated(state.automodSettingsForm.exemptUserIds),
-      exempt_users: parseCommaSeparated(state.automodSettingsForm.exemptUserIds),
+      guild_id: String(guildId || "").trim(),
+      guildId: String(guildId || "").trim(),
+      log_channel_id: logChannelId,
+      log_channel: logChannelId,
+      automod_log_channel_id: logChannelId,
+      automod_log_channel: logChannelId,
+      logChannelId: logChannelId,
+      // Nullable aliases help backends clear saved channel values when user removes them.
+      log_channel_id_nullable: logChannelIdNullable,
+      automod_log_channel_nullable: logChannelIdNullable,
+      exempt_role_ids: exemptRoleIds,
+      exempt_roles: exemptRoleIds,
+      exempt_role_ids_csv: exemptRoleIdsCsv,
+      exempt_roles_csv: exemptRoleIdsCsv,
+      exempt_role_ids_nullable: exemptRoleIdsNullable,
+      exempt_roles_nullable: exemptRoleIdsNullable,
+      exemptRoleIds,
+      ignored_role_ids: exemptRoleIds,
+      ignored_roles: exemptRoleIds,
+      ignored_role_ids_csv: exemptRoleIdsCsv,
+      ignored_role_ids_nullable: exemptRoleIdsNullable,
+      exempt_channel_ids: exemptChannelIds,
+      exempt_channels: exemptChannelIds,
+      exempt_channel_ids_csv: exemptChannelIdsCsv,
+      exempt_channels_csv: exemptChannelIdsCsv,
+      exempt_channel_ids_nullable: exemptChannelIdsNullable,
+      exempt_channels_nullable: exemptChannelIdsNullable,
+      exemptChannelIds,
+      ignored_channel_ids: exemptChannelIds,
+      ignored_channels: exemptChannelIds,
+      ignored_channel_ids_csv: exemptChannelIdsCsv,
+      ignored_channel_ids_nullable: exemptChannelIdsNullable,
+      exempt_user_ids: exemptUserIds,
+      exempt_users: exemptUserIds,
+      exempt_user_ids_csv: exemptUserIdsCsv,
+      exempt_users_csv: exemptUserIdsCsv,
+      exempt_user_ids_nullable: exemptUserIdsNullable,
+      exempt_users_nullable: exemptUserIdsNullable,
+      exemptUserIds,
+      ignored_user_ids: exemptUserIds,
+      ignored_users: exemptUserIds,
+      ignored_user_ids_csv: exemptUserIdsCsv,
+      ignored_user_ids_nullable: exemptUserIdsNullable,
       command_settings: {
-        automod_log_channel: state.automodSettingsForm.logChannelId.trim(),
+        automod_log_channel: logChannelId,
+        automod_log_channel_id: logChannelId,
+        exempt_role_ids: exemptRoleIds,
+        exempt_channel_ids: exemptChannelIds,
+        exempt_user_ids: exemptUserIds,
+        ignored_role_ids: exemptRoleIds,
+        ignored_channel_ids: exemptChannelIds,
+        ignored_user_ids: exemptUserIds,
       },
+    };
+
+    const expectedSettings = {
+      logChannelId,
+      exemptRoleIds,
+      exemptChannelIds,
+      exemptUserIds,
     };
 
     const candidates = [
@@ -771,7 +892,13 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         });
 
         if (response.ok) {
-          state.statusMessage = "AutoMod settings updated successfully.";
+          // Read-after-write verification confirms whether backend actually persisted the values.
+          await loadSettings(guildId, state);
+          const persisted = didSettingsPersist(expectedSettings, state.automodSettingsForm);
+
+          state.statusMessage = persisted
+            ? "AutoMod settings updated successfully."
+            : "Save request succeeded, but server returned different settings. Backend persistence may be failing.";
           return;
         }
 
@@ -926,7 +1053,18 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       return;
     }
 
+    const exemptRoleIdsCsv = state.editingRuleForm.exemptRoleIds.trim();
+    const exemptRoleIds = parseCommaSeparated(state.editingRuleForm.exemptRoleIds);
+    const exemptRoleIdsNullable = exemptRoleIds.length > 0 ? exemptRoleIds : null;
+    const exemptChannelIdsCsv = state.editingRuleForm.exemptChannelIds.trim();
+    const exemptChannelIds = parseCommaSeparated(state.editingRuleForm.exemptChannelIds);
+    const exemptChannelIdsNullable = exemptChannelIds.length > 0 ? exemptChannelIds : null;
+    const exemptUserIdsCsv = state.editingRuleForm.exemptUserIds.trim();
+    const exemptUserIds = parseCommaSeparated(state.editingRuleForm.exemptUserIds);
+    const exemptUserIdsNullable = exemptUserIds.length > 0 ? exemptUserIds : null;
+
     const payload = {
+      guild_id: guildId,
       name: String(state.editingRuleForm.name || "").trim(),
       keyword: String(state.editingRuleForm.keyword || "").trim(),
       keywords: editKeywordTokens,
@@ -934,13 +1072,55 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       action: state.editingRuleForm.action,
       threshold: Math.max(1, Number(state.editingRuleForm.threshold || 1)),
       enabled: state.editingRuleForm.enabled,
-      exempt_role_ids: parseCommaSeparated(state.editingRuleForm.exemptRoleIds),
-      exempt_roles: parseCommaSeparated(state.editingRuleForm.exemptRoleIds),
-      exempt_channel_ids: parseCommaSeparated(state.editingRuleForm.exemptChannelIds),
-      exempt_channels: parseCommaSeparated(state.editingRuleForm.exemptChannelIds),
-      exempt_user_ids: parseCommaSeparated(state.editingRuleForm.exemptUserIds),
-      exempt_users: parseCommaSeparated(state.editingRuleForm.exemptUserIds),
+      exempt_role_ids: exemptRoleIds,
+      exempt_roles: exemptRoleIds,
+      exempt_role_ids_csv: exemptRoleIdsCsv,
+      exempt_roles_csv: exemptRoleIdsCsv,
+      exempt_role_ids_nullable: exemptRoleIdsNullable,
+      exempt_roles_nullable: exemptRoleIdsNullable,
+      exemptRoleIds,
+      ignored_role_ids: exemptRoleIds,
+      ignored_roles: exemptRoleIds,
+      ignored_role_ids_csv: exemptRoleIdsCsv,
+      ignored_role_ids_nullable: exemptRoleIdsNullable,
+      exempt_channel_ids: exemptChannelIds,
+      exempt_channels: exemptChannelIds,
+      exempt_channel_ids_csv: exemptChannelIdsCsv,
+      exempt_channels_csv: exemptChannelIdsCsv,
+      exempt_channel_ids_nullable: exemptChannelIdsNullable,
+      exempt_channels_nullable: exemptChannelIdsNullable,
+      exemptChannelIds,
+      ignored_channel_ids: exemptChannelIds,
+      ignored_channels: exemptChannelIds,
+      ignored_channel_ids_csv: exemptChannelIdsCsv,
+      ignored_channel_ids_nullable: exemptChannelIdsNullable,
+      exempt_user_ids: exemptUserIds,
+      exempt_users: exemptUserIds,
+      exempt_user_ids_csv: exemptUserIdsCsv,
+      exempt_users_csv: exemptUserIdsCsv,
+      exempt_user_ids_nullable: exemptUserIdsNullable,
+      exempt_users_nullable: exemptUserIdsNullable,
+      exemptUserIds,
+      ignored_user_ids: exemptUserIds,
+      ignored_users: exemptUserIds,
+      ignored_user_ids_csv: exemptUserIdsCsv,
+      ignored_user_ids_nullable: exemptUserIdsNullable,
     };
+
+    const expectedRuleFields = {
+      name: String(state.editingRuleForm.name || "").trim(),
+      keyword: String(state.editingRuleForm.keyword || "").trim(),
+      keywords: editKeywordTokens,
+      pattern: String(state.editingRuleForm.pattern || "").trim(),
+      action: String(state.editingRuleForm.action || "warn"),
+      threshold: Math.max(1, Number(state.editingRuleForm.threshold || 1)),
+      enabled: Boolean(state.editingRuleForm.enabled),
+      exemptRoleIds,
+      exemptChannelIds,
+      exemptUserIds,
+    };
+
+    const editingRuleId = state.editingRuleId;
 
     const candidates = [
       `${backendUrl}/api/guilds/rules/${encodeURIComponent(state.editingRuleId)}?guild_id=${encodeURIComponent(guildId)}`,
@@ -952,6 +1132,132 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     try {
       const editedKeyword = state.editingRuleForm.keyword.trim();
       let lastError = null;
+
+      const didRulePersist = (rule) => {
+        const updatedComparable = toRuleEditForm(rule || {});
+        return (
+          String(updatedComparable.name || "").trim() === expectedRuleFields.name &&
+          String(updatedComparable.keyword || "").trim() === expectedRuleFields.keyword &&
+          String(updatedComparable.pattern || "").trim() === expectedRuleFields.pattern &&
+          String(updatedComparable.action || "warn") === expectedRuleFields.action &&
+          Math.max(1, Number(updatedComparable.threshold || 1)) === expectedRuleFields.threshold &&
+          Boolean(updatedComparable.enabled) === expectedRuleFields.enabled &&
+          areIdListsEqual(updatedComparable.exemptRoleIds, expectedRuleFields.exemptRoleIds) &&
+          areIdListsEqual(updatedComparable.exemptChannelIds, expectedRuleFields.exemptChannelIds) &&
+          areIdListsEqual(updatedComparable.exemptUserIds, expectedRuleFields.exemptUserIds)
+        );
+      };
+
+      const fallbackPersistRuleViaSettings = async () => {
+        const guildIdAsString = String(guildId || "").trim();
+        const inMemoryRules = Array.isArray(state.automodRules) ? state.automodRules : [];
+        const settingsCandidates = [
+          `${backendUrl}/api/guilds/settings?guild_id=${encodeURIComponent(guildId)}`,
+          `${backendUrl}/api/guilds/settings/automod?guild_id=${encodeURIComponent(guildId)}`,
+          `${backendUrl}/api/guilds/automod-settings?guild_id=${encodeURIComponent(guildId)}`,
+        ];
+
+        for (const url of settingsCandidates) {
+          let payloadFromServer = {};
+          const response = await fetch(url, { method: "GET", credentials: "include" });
+          if (response.ok) {
+            payloadFromServer = (await response.json().catch(() => null)) || {};
+          }
+
+          const automodRules =
+            (Array.isArray(payloadFromServer?.automod_rules) && payloadFromServer.automod_rules) ||
+            (Array.isArray(payloadFromServer?.settings?.automod_rules) && payloadFromServer.settings.automod_rules) ||
+            (Array.isArray(payloadFromServer?.data?.automod_rules) && payloadFromServer.data.automod_rules) ||
+            inMemoryRules;
+
+          const ruleIndex = automodRules.findIndex((rule) => getRuleId(rule) === editingRuleId);
+          const existingRule = ruleIndex >= 0 ? automodRules[ruleIndex] || {} : {};
+          const updatedRule = {
+            ...existingRule,
+            id: existingRule.id || editingRuleId,
+            rule_id: existingRule.rule_id || editingRuleId,
+            name: expectedRuleFields.name,
+            rule_name: expectedRuleFields.name || existingRule.rule_name || "AutoMod Rule",
+            keyword: expectedRuleFields.keyword,
+            keywords: expectedRuleFields.keywords,
+            pattern: expectedRuleFields.pattern,
+            action: expectedRuleFields.action,
+            threshold: expectedRuleFields.threshold,
+            enabled: expectedRuleFields.enabled,
+            exempt_roles: expectedRuleFields.exemptRoleIds,
+            exempt_channels: expectedRuleFields.exemptChannelIds,
+            exempt_users: expectedRuleFields.exemptUserIds,
+            exempt_role_ids: expectedRuleFields.exemptRoleIds,
+            exempt_channel_ids: expectedRuleFields.exemptChannelIds,
+            exempt_user_ids: expectedRuleFields.exemptUserIds,
+          };
+
+          const updatedRules =
+            ruleIndex >= 0
+              ? automodRules.map((rule, index) => (index === ruleIndex ? updatedRule : rule))
+              : [...automodRules, updatedRule];
+          const commandSettings = {
+            ...(payloadFromServer?.command_settings || {}),
+            automod_log_channel: String(state.automodSettingsForm.logChannelId || "").trim(),
+          };
+
+          const bodyCandidates = [
+            {
+              guild_id: guildIdAsString,
+              automod_rules: updatedRules,
+              command_settings: commandSettings,
+            },
+            {
+              guildId: guildIdAsString,
+              settings: {
+                automod_rules: updatedRules,
+                command_settings: commandSettings,
+              },
+            },
+            {
+              guild_id: guildIdAsString,
+              data: {
+                automod_rules: updatedRules,
+                command_settings: commandSettings,
+              },
+            },
+            {
+              guild_id: guildIdAsString,
+              rule_id: editingRuleId,
+              rule: updatedRule,
+              command_settings: commandSettings,
+            },
+            {
+              guild_id: guildIdAsString,
+              rule_id: editingRuleId,
+              exempt_roles: expectedRuleFields.exemptRoleIds,
+              exempt_channels: expectedRuleFields.exemptChannelIds,
+              exempt_users: expectedRuleFields.exemptUserIds,
+              exempt_role_ids: expectedRuleFields.exemptRoleIds,
+              exempt_channel_ids: expectedRuleFields.exemptChannelIds,
+              exempt_user_ids: expectedRuleFields.exemptUserIds,
+              command_settings: commandSettings,
+            },
+          ];
+
+          for (const method of ["PUT", "PATCH"]) {
+            for (const saveBody of bodyCandidates) {
+              const saveResponse = await fetch(url, {
+                method,
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(saveBody),
+              });
+
+              if (saveResponse.ok) {
+                return true;
+              }
+            }
+          }
+        }
+
+        return false;
+      };
 
       for (const url of candidates) {
         const response = await fetch(url, {
@@ -966,9 +1272,25 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
             state.keywordOverrides[state.editingRuleId] = editedKeyword;
           }
 
-          state.statusMessage = "AutoMod rule updated successfully.";
-          cancelEditRule(state);
           await loadRules(guildId, state);
+
+          const updatedRule = state.automodRules.find((rule) => getRuleId(rule) === editingRuleId);
+          let persisted = didRulePersist(updatedRule);
+
+          if (!persisted) {
+            const fallbackSaved = await fallbackPersistRuleViaSettings();
+            if (fallbackSaved) {
+              await loadRules(guildId, state);
+              const retryRule = state.automodRules.find((rule) => getRuleId(rule) === editingRuleId);
+              persisted = didRulePersist(retryRule);
+            }
+          }
+
+          state.statusMessage = persisted
+            ? "AutoMod rule updated successfully."
+            : "Save request succeeded, but server returned different rule values. Backend persistence may be failing.";
+
+          cancelEditRule(state);
           return;
         }
 
@@ -1148,6 +1470,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const editRegexTokens = parseCommaSeparated(state.editingRuleForm.pattern);
     const isEditLimitExceeded = editKeywordTokens.length > MAX_WORDS || editRegexTokens.length > MAX_REGEXES;
     const editHasChanges = hasEditChanges(state);
+    const settingsHasChanges = hasSettingsChanges(state);
     const changedFields = getChangedEditFields(state);
 
     root.innerHTML = `
@@ -1237,7 +1560,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           </label>
 
           <div class="automod-rule-actions automod-rule-actions-full">
-            <button class="action-btn" type="button" data-save-edit ${state.isSavingEdit || isEditLimitExceeded || !editHasChanges ? "disabled" : ""}>
+            <button class="action-btn" type="button" data-save-edit ${state.isSavingEdit || state.isSavingSettings || isEditLimitExceeded || (!editHasChanges && !settingsHasChanges) ? "disabled" : ""}>
               ${state.isSavingEdit ? "Saving..." : "Save Rule"}
             </button>
             <button class="action-btn secondary" type="button" data-save-settings ${state.isSavingSettings ? "disabled" : ""}>
@@ -1312,7 +1635,17 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           return;
         }
 
-        await saveEditedRule(guildId, state);
+        const shouldSaveRule = hasEditChanges(state);
+        const shouldSaveSettings = hasSettingsChanges(state);
+
+        if (shouldSaveSettings) {
+          await saveSettings(guildId, state);
+        }
+
+        if (shouldSaveRule) {
+          await saveEditedRule(guildId, state);
+        }
+
         renderRuleEditorContent();
       });
     }
@@ -1352,8 +1685,17 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     root.addEventListener("keydown", async (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        if (!isEditLimitExceeded && !state.isSavingEdit && hasEditChanges(state)) {
-          await saveEditedRule(guildId, state);
+        const shouldSaveRule = hasEditChanges(state);
+        const shouldSaveSettings = hasSettingsChanges(state);
+        if (!isEditLimitExceeded && !state.isSavingEdit && (shouldSaveRule || shouldSaveSettings)) {
+          if (shouldSaveSettings) {
+            await saveSettings(guildId, state);
+          }
+
+          if (shouldSaveRule) {
+            await saveEditedRule(guildId, state);
+          }
+
           renderRuleEditorContent();
         }
       }
