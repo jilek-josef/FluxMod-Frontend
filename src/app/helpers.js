@@ -22,6 +22,89 @@ export function parseCommaSeparated(value) {
     .filter(Boolean);
 }
 
+export function splitRegexPatterns(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+  }
+
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return [];
+  }
+
+  if (raw.includes("\n")) {
+    return raw
+      .split(/\r?\n/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  const segments = [];
+  let current = "";
+  let escaped = false;
+  let inCharClass = false;
+  let parenDepth = 0;
+  let braceDepth = 0;
+
+  for (const char of raw) {
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      current += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === "[" && !inCharClass) {
+      inCharClass = true;
+      current += char;
+      continue;
+    }
+
+    if (char === "]" && inCharClass) {
+      inCharClass = false;
+      current += char;
+      continue;
+    }
+
+    if (!inCharClass) {
+      if (char === "(") {
+        parenDepth += 1;
+      } else if (char === ")" && parenDepth > 0) {
+        parenDepth -= 1;
+      } else if (char === "{") {
+        braceDepth += 1;
+      } else if (char === "}" && braceDepth > 0) {
+        braceDepth -= 1;
+      }
+
+      if (char === "," && parenDepth === 0 && braceDepth === 0) {
+        const cleaned = current.trim();
+        if (cleaned) {
+          segments.push(cleaned);
+        }
+        current = "";
+        continue;
+      }
+    }
+
+    current += char;
+  }
+
+  const cleaned = current.trim();
+  if (cleaned) {
+    segments.push(cleaned);
+  }
+
+  return segments;
+}
+
 export function normalizeIdList(value) {
   return parseCommaSeparated(value).join(", ");
 }
@@ -107,9 +190,23 @@ export function normalizeRule(rule = {}) {
     rule?.filters?.regexes
   );
 
+  const allowedKeywords = pickRuleText(
+    rule?.allowed_keywords,
+    rule?.allowed_patterns,
+    rule?.allowedKeywords,
+    rule?.allowedPatterns,
+    rule?.allow_keywords,
+    rule?.allow_patterns,
+    rule?.match?.allowed_keywords,
+    rule?.match?.allowed_patterns,
+    rule?.filters?.allowed_keywords,
+    rule?.filters?.allowed_patterns
+  );
+
   return {
     ...rule,
     keyword,
+    allowedKeywords,
     pattern,
   };
 }

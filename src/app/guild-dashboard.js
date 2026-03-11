@@ -10,6 +10,7 @@ import {
   normalizeRule,
   normalizeRulesResponse,
   parseCommaSeparated,
+  splitRegexPatterns,
   resolveGuildId,
 } from "./helpers.js";
 
@@ -18,7 +19,175 @@ function resolveRuleId(search) {
   return params.get("rule_id") || params.get("id") || "";
 }
 
+const RULE_PRESET_TEMPLATES = {
+  "Emoji Caps": {
+    name: "Emoji Caps",
+    type: "emoji",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 2,
+    action: "delete",
+    pattern: "(?:<(?:a)?:[a-zA-Z0-9_]{2,32}:[0-9]{17,20}>\\s*){1,}",
+  },
+
+  "Caps Lock": {
+    name: "Caps Lock",
+    type: "caps",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 1,
+    action: "warn",
+    pattern: "\\b[A-Z]{6,}\\b",
+  },
+
+  "Spam Detection": {
+    name: "Spam Detection",
+    type: "spam",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 2,
+    action: "delete",
+    pattern: "(.)\\1{6,}|(\\b\\w+\\b)(?:\\s+\\1){3,}",
+  },
+
+  "Mention Spam Detection": {
+    name: "Mention Spam Detection",
+    type: "mention",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 3,
+    action: "timeout",
+    pattern:
+      "(?:<@!?\\d+>|<@&\\d+>|@everyone|@here)(?:\\s*(?:<@!?\\d+>|<@&\\d+>|@everyone|@here)){4,}",
+  },
+
+  "Media Filters": {
+    name: "Media Filters",
+    type: "media",
+    keyword: "",
+    allowedKeywords: [
+      "youtube.com",
+      "youtu.be",
+      "tenor.com",
+      "imgur.com",
+      "spotify.com",
+    ],
+    severity: 1,
+    action: "delete",
+    pattern:
+      "https?:\\/\\/[^\\s]+\\.(?:png|jpe?g|gif|webp|mp4|mov|webm)(?:\\?[^\\s]*)?",
+  },
+
+  "Invite Link Detection": {
+    name: "Invite Link Detection",
+    type: "invite",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 2,
+    action: "delete",
+    pattern:
+      "(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord\.com\/invite|discordapp\.com\/invite|fluxer\.gg)\/[A-Za-z0-9]+",
+  },
+
+  "URL Spam": {
+    name: "URL Spam",
+    type: "link",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 2,
+    action: "delete",
+    pattern:
+      "(?:https?:\\/\\/[^\\s]+)(?:\\s*(?:https?:\\/\\/[^\\s]+)){2,}",
+  },
+
+  "Excessive Symbols": {
+    name: "Excessive Symbols",
+    type: "symbols",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 1,
+    action: "delete",
+    pattern:
+      "[!@#$%^&*()_+=\\-\\[\\]{};':\"\\\\|,.<>/?]{8,}",
+  },
+
+  "Zalgo / Unicode Spam": {
+    name: "Zalgo / Unicode Spam",
+    type: "unicode",
+    keyword: "",
+    allowedKeywords: [],
+    severity: 1,
+    action: "delete",
+    pattern:
+      "[\\u0300-\\u036F]{5,}",
+  },
+};
+
+const RULE_NAME_PRESETS = Object.keys(RULE_PRESET_TEMPLATES);
+const RULE_ACTION_OPTIONS = ["warn", "delete", "timeout", "mute", "kick", "ban"];
+
 export function createGuildDashboardController({ backendUrl, appState, defaultImage, navigate }) {
+  function uniqueStrings(values) {
+    return Array.from(
+      new Set(
+        values
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      )
+    );
+  }
+
+  function applyRulePresets(targetForm, presetNames) {
+    if (!targetForm || !Array.isArray(presetNames) || presetNames.length === 0) {
+      return false;
+    }
+
+    const selectedNames = presetNames.filter((presetName) => Boolean(RULE_PRESET_TEMPLATES[presetName]));
+    if (selectedNames.length === 0) {
+      return false;
+    }
+
+    const mergedKeywords = [];
+    const mergedAllowedKeywords = [];
+    const mergedPatterns = [];
+    let mergedAction = "warn";
+
+    selectedNames.forEach((presetName) => {
+      const template = RULE_PRESET_TEMPLATES[presetName];
+      if (!template) {
+        return;
+      }
+
+      mergedKeywords.push(...parseCommaSeparated(template.keyword || ""));
+      mergedAllowedKeywords.push(...parseCommaSeparated(template.allowedKeywords || []));
+      mergedPatterns.push(...splitRegexPatterns(template.pattern || ""));
+      mergedAction = String(template.action || mergedAction);
+    });
+
+    targetForm.name =
+      selectedNames.length === 1
+        ? String(RULE_PRESET_TEMPLATES[selectedNames[0]]?.name || targetForm.name || "")
+        : "Combined Presets Rule";
+    targetForm.keyword = uniqueStrings(mergedKeywords).join(", ");
+    targetForm.allowedKeywords = uniqueStrings(mergedAllowedKeywords).join(", ");
+    targetForm.pattern = uniqueStrings(mergedPatterns).join("\n");
+    targetForm.action = mergedAction;
+    return true;
+  }
+
+  function buildPatternForApi(rawPattern) {
+    const parts = splitRegexPatterns(rawPattern);
+    if (parts.length === 0) {
+      return "";
+    }
+
+    if (parts.length === 1) {
+      return parts[0];
+    }
+
+    return parts.map((part) => `(?:${part})`).join("|");
+  }
+
   function captureFocusedInput() {
     const active = document.activeElement;
     if (!(active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active instanceof HTMLSelectElement)) {
@@ -102,6 +271,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       automodForm: {
         name: "AutoMod Rule",
         keyword: "",
+        allowedKeywords: "",
         pattern: "",
         action: "warn",
         threshold: 1,
@@ -114,6 +284,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       editingRuleForm: {
         name: "",
         keyword: "",
+        allowedKeywords: "",
         pattern: "",
         action: "warn",
         threshold: 1,
@@ -141,6 +312,11 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       isLoadingSettings: false,
       isSavingSettings: false,
       keywordOverrides: {},
+      presetSelections: {
+        create: [],
+        inlineEdit: [],
+        editor: [],
+      },
     };
   }
 
@@ -166,6 +342,15 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     return {
       name: rule?.name || "",
       keyword: rule?.keyword || "",
+      allowedKeywords: normalizeIdList(
+        firstDefined(
+          rule?.allowed_patterns,
+          rule?.allowed_keywords,
+          rule?.allowedPatterns,
+          rule?.allowedKeywords,
+          []
+        )
+      ),
       pattern: rule?.pattern || "",
       action: rule?.action || "warn",
       threshold: Math.max(1, Number(rule?.threshold || 1)),
@@ -204,6 +389,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     return {
       name: String(form.name || "").trim(),
       keyword: String(form.keyword || "").trim(),
+      allowedKeywords: String(form.allowedKeywords || "").trim(),
       pattern: String(form.pattern || "").trim(),
       action: String(form.action || "warn"),
       threshold: Math.max(1, Number(form.threshold || 1)),
@@ -236,6 +422,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     [
       "name",
       "keyword",
+      "allowedKeywords",
       "pattern",
       "action",
       "threshold",
@@ -258,6 +445,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         return "rule name";
       case "keyword":
         return "keywords";
+      case "allowedKeywords":
+        return "allowed keywords";
       case "pattern":
         return "patterns";
       case "action":
@@ -337,6 +526,37 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       return;
     }
 
+    root.querySelectorAll("[data-preset-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const context = button.getAttribute("data-preset-context") || "";
+        const presetName = button.getAttribute("data-preset-name") || "";
+        if (!context || !presetName || !Object.hasOwn(state.presetSelections, context)) {
+          return;
+        }
+
+        const selected = Array.isArray(state.presetSelections[context])
+          ? [...state.presetSelections[context]]
+          : [];
+        const existingIndex = selected.indexOf(presetName);
+        if (existingIndex >= 0) {
+          selected.splice(existingIndex, 1);
+        } else {
+          selected.push(presetName);
+        }
+
+        state.presetSelections[context] = selected;
+
+        if (context === "create" && selected.length > 0) {
+          applyRulePresets(state.automodForm, selected);
+        }
+        if (context === "inlineEdit" && selected.length > 0) {
+          applyRulePresets(state.editingRuleForm, selected);
+        }
+
+        rerenderKeepingInput(renderContent);
+      });
+    });
+
     const user = appState.user || {};
     const guilds = Array.isArray(user?.guilds) ? user.guilds : [];
     const guildId = resolveGuildId(window.location.search);
@@ -354,9 +574,15 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const visibleRules = state.automodRules.slice(0, MAX_AUTOMOD_RULES);
     const hasReachedRuleLimit = state.automodRules.length >= MAX_AUTOMOD_RULES;
     const keywordTokens = parseCommaSeparated(state.automodForm.keyword);
-    const regexTokens = parseCommaSeparated(state.automodForm.pattern);
+    const allowedKeywordTokens = parseCommaSeparated(state.automodForm.allowedKeywords);
+    const regexTokens = splitRegexPatterns(state.automodForm.pattern);
     const editKeywordTokens = parseCommaSeparated(state.editingRuleForm.keyword);
-    const editRegexTokens = parseCommaSeparated(state.editingRuleForm.pattern);
+    const editAllowedKeywordTokens = parseCommaSeparated(state.editingRuleForm.allowedKeywords);
+    const editRegexTokens = splitRegexPatterns(state.editingRuleForm.pattern);
+    const createSelectedPresets = Array.isArray(state.presetSelections?.create) ? state.presetSelections.create : [];
+    const inlineEditSelectedPresets = Array.isArray(state.presetSelections?.inlineEdit)
+      ? state.presetSelections.inlineEdit
+      : [];
     const isCreateLimitExceeded = keywordTokens.length > MAX_WORDS || regexTokens.length > MAX_REGEXES;
     const isEditLimitExceeded = editKeywordTokens.length > MAX_WORDS || editRegexTokens.length > MAX_REGEXES;
     const editHasChanges = hasEditChanges(state);
@@ -394,6 +620,17 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                           <input name="name" value="${escapeHtml(state.editingRuleForm.name)}" data-edit-input />
                         </label>
 
+                        <label class="automod-rule-label automod-preset-control">
+                          Presets
+                          <div class="preset-toggle-list" role="group" aria-label="Inline edit presets">
+                            ${RULE_NAME_PRESETS.map(
+                              (name) =>
+                                `<button class="preset-toggle-btn ${inlineEditSelectedPresets.includes(name) ? "is-active" : ""}" type="button" data-preset-toggle data-preset-context="inlineEdit" data-preset-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`
+                            ).join("")}
+                          </div>
+                          <span class="field-hint">Click presets to toggle them on or off.</span>
+                        </label>
+
                         <label class="automod-rule-label">
                           Keyword
                           <input name="keyword" value="${escapeHtml(state.editingRuleForm.keyword)}" data-edit-input />
@@ -401,15 +638,25 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                         </label>
 
                         <label class="automod-rule-label">
+                          Allowed Keywords
+                          <input name="allowedKeywords" value="${escapeHtml(state.editingRuleForm.allowedKeywords)}" data-edit-input />
+                          <span class="token-counter">${editAllowedKeywordTokens.length} allowed</span>
+                        </label>
+
+                        <label class="automod-rule-label">
                           Pattern
-                          <input name="pattern" value="${escapeHtml(state.editingRuleForm.pattern)}" data-edit-input />
+                          <textarea name="pattern" rows="4" data-edit-input>${escapeHtml(state.editingRuleForm.pattern)}</textarea>
+                          <span class="field-hint">Use one regex per line for clear separation.</span>
                           <span class="token-counter">${editRegexTokens.length} / ${MAX_REGEXES} regexes</span>
                         </label>
 
                         <label class="automod-rule-label">
                           Action
                           <select name="action" data-edit-input>
-                            <option value="warn" ${state.editingRuleForm.action === "warn" ? "selected" : ""}>Warn</option>
+                            ${RULE_ACTION_OPTIONS.map(
+                              (action) =>
+                                `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(action.charAt(0).toUpperCase() + action.slice(1))}</option>`
+                            ).join("")}
                           </select>
                         </label>
 
@@ -509,12 +756,23 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         <form class="automod-form" id="automod-create-form">
           <label class="automod-rule-label">
             Rule Name
-            <input name="name" value="${escapeHtml(state.automodForm.name)}" required />
+            <input name="name" value="${escapeHtml(state.automodForm.name)}" list="automod-rule-name-presets" required />
+          </label>
+
+          <label class="automod-rule-label automod-preset-control">
+            Presets
+            <div class="preset-toggle-list" role="group" aria-label="Create presets">
+              ${RULE_NAME_PRESETS.map(
+                (name) =>
+                  `<button class="preset-toggle-btn ${createSelectedPresets.includes(name) ? "is-active" : ""}" type="button" data-preset-toggle data-preset-context="create" data-preset-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`
+              ).join("")}
+            </div>
+            <span class="field-hint">Click presets to toggle them on or off.</span>
           </label>
 
           <label class="automod-rule-label">
             Keyword
-            <input name="keyword" value="${escapeHtml(state.automodForm.keyword)}" placeholder="badword, badword2" required />
+            <input name="keyword" value="${escapeHtml(state.automodForm.keyword)}" placeholder="badword, badword2" />
             <span class="token-counter">${keywordTokens.length} / ${MAX_WORDS} words</span>
             ${
               keywordTokens.length > 0
@@ -524,8 +782,22 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           </label>
 
           <label class="automod-rule-label">
+            Allowed Keywords
+            <input name="allowedKeywords" value="${escapeHtml(state.automodForm.allowedKeywords)}" placeholder="example.com, trusted phrase" />
+            <span class="token-counter">${allowedKeywordTokens.length} allowed</span>
+            ${
+              allowedKeywordTokens.length > 0
+                ? `<span class="token-chip-list">${allowedKeywordTokens
+                    .map((token) => `<span class="token-chip muted">${escapeHtml(token)}</span>`)
+                    .join("")}</span>`
+                : ""
+            }
+          </label>
+
+          <label class="automod-rule-label">
             Pattern (Optional)
-            <input name="pattern" value="${escapeHtml(state.automodForm.pattern)}" placeholder="\\b(badword)\\b, (https?:\\/\\/\\S+)" />
+            <textarea name="pattern" rows="5" placeholder="\\b(badword)\\b&#10;(https?:\\/\\/\\S+)">${escapeHtml(state.automodForm.pattern)}</textarea>
+            <span class="field-hint">Use one regex per line for clear separation.</span>
             <span class="token-counter">${regexTokens.length} / ${MAX_REGEXES} regexes</span>
             ${
               regexTokens.length > 0
@@ -537,7 +809,10 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           <label class="automod-rule-label">
             Action
             <select name="action">
-              <option value="warn" ${state.automodForm.action === "warn" ? "selected" : ""}>Warn</option>
+              ${RULE_ACTION_OPTIONS.map(
+                (action) =>
+                  `<option value="${escapeHtml(action)}" ${state.automodForm.action === action ? "selected" : ""}>${escapeHtml(action.charAt(0).toUpperCase() + action.slice(1))}</option>`
+              ).join("")}
             </select>
           </label>
 
@@ -551,6 +826,10 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         <div class="automod-rules-list">
           ${state.isLoadingRules ? '<p class="subtitle">Loading AutoMod rules...</p>' : rulesHtml}
         </div>
+
+        <datalist id="automod-rule-name-presets">
+          ${RULE_NAME_PRESETS.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("")}
+        </datalist>
       </section>
 
       ${state.statusMessage ? `<p class="subtitle">${escapeHtml(state.statusMessage)}</p>` : ""}
@@ -585,6 +864,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         const formData = new FormData(createForm);
         state.automodForm.name = String(formData.get("name") || "");
         state.automodForm.keyword = String(formData.get("keyword") || "");
+        state.automodForm.allowedKeywords = String(formData.get("allowedKeywords") || "");
         state.automodForm.pattern = String(formData.get("pattern") || "");
         state.automodForm.action = String(formData.get("action") || "warn");
         rerenderKeepingInput(renderContent);
@@ -600,6 +880,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         await createRule(guildId, state);
         renderContent();
       });
+
     }
 
     if (!root) {
@@ -960,7 +1241,9 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
   async function createRule(guildId, state) {
     const keywordTokens = parseCommaSeparated(state.automodForm.keyword);
-    const regexTokens = parseCommaSeparated(state.automodForm.pattern);
+    const allowedKeywordTokens = parseCommaSeparated(state.automodForm.allowedKeywords);
+    const regexTokens = splitRegexPatterns(state.automodForm.pattern);
+    const compiledPattern = buildPatternForApi(state.automodForm.pattern);
 
     if (!guildId) {
       state.statusMessage = "Missing guild id in URL.";
@@ -969,6 +1252,11 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
     if (state.automodRules.length >= MAX_AUTOMOD_RULES) {
       state.statusMessage = `This guild already has ${MAX_AUTOMOD_RULES} AutoMod rules.`;
+      return;
+    }
+
+    if (keywordTokens.length === 0 && regexTokens.length === 0) {
+      state.statusMessage = "Add at least one keyword or one regex pattern.";
       return;
     }
 
@@ -995,7 +1283,10 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           name: state.automodForm.name,
           keyword: state.automodForm.keyword,
           keywords: keywordTokens,
-          pattern: state.automodForm.pattern,
+          allowed_keywords: allowedKeywordTokens,
+          allowed_patterns: allowedKeywordTokens,
+          allowedKeywords: allowedKeywordTokens,
+          pattern: compiledPattern,
           action: state.automodForm.action,
           threshold: state.automodForm.threshold,
           enabled: true,
@@ -1020,6 +1311,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
       state.statusMessage = "AutoMod rule created successfully.";
       state.automodForm.keyword = "";
+      state.automodForm.allowedKeywords = "";
       state.automodForm.pattern = "";
       state.automodForm.threshold = 1;
       await loadRules(guildId, state);
@@ -1041,7 +1333,9 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     }
 
     const editKeywordTokens = parseCommaSeparated(state.editingRuleForm.keyword);
-    const editRegexTokens = parseCommaSeparated(state.editingRuleForm.pattern);
+    const editAllowedKeywordTokens = parseCommaSeparated(state.editingRuleForm.allowedKeywords);
+    const editRegexTokens = splitRegexPatterns(state.editingRuleForm.pattern);
+    const compiledPattern = buildPatternForApi(state.editingRuleForm.pattern);
 
     if (editKeywordTokens.length > MAX_WORDS) {
       state.statusMessage = `Keywords exceed max limit (${MAX_WORDS}).`;
@@ -1050,6 +1344,11 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
     if (editRegexTokens.length > MAX_REGEXES) {
       state.statusMessage = `Regex patterns exceed max limit (${MAX_REGEXES}).`;
+      return;
+    }
+
+    if (editKeywordTokens.length === 0 && editRegexTokens.length === 0) {
+      state.statusMessage = "Add at least one keyword or one regex pattern before saving.";
       return;
     }
 
@@ -1068,7 +1367,10 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       name: String(state.editingRuleForm.name || "").trim(),
       keyword: String(state.editingRuleForm.keyword || "").trim(),
       keywords: editKeywordTokens,
-      pattern: String(state.editingRuleForm.pattern || "").trim(),
+      allowed_keywords: editAllowedKeywordTokens,
+      allowed_patterns: editAllowedKeywordTokens,
+      allowedKeywords: editAllowedKeywordTokens,
+      pattern: compiledPattern,
       action: state.editingRuleForm.action,
       threshold: Math.max(1, Number(state.editingRuleForm.threshold || 1)),
       enabled: state.editingRuleForm.enabled,
@@ -1111,7 +1413,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       name: String(state.editingRuleForm.name || "").trim(),
       keyword: String(state.editingRuleForm.keyword || "").trim(),
       keywords: editKeywordTokens,
-      pattern: String(state.editingRuleForm.pattern || "").trim(),
+      allowedKeywords: editAllowedKeywordTokens,
+      pattern: compiledPattern,
       action: String(state.editingRuleForm.action || "warn"),
       threshold: Math.max(1, Number(state.editingRuleForm.threshold || 1)),
       enabled: Boolean(state.editingRuleForm.enabled),
@@ -1138,6 +1441,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         return (
           String(updatedComparable.name || "").trim() === expectedRuleFields.name &&
           String(updatedComparable.keyword || "").trim() === expectedRuleFields.keyword &&
+          areIdListsEqual(updatedComparable.allowedKeywords, expectedRuleFields.allowedKeywords) &&
           String(updatedComparable.pattern || "").trim() === expectedRuleFields.pattern &&
           String(updatedComparable.action || "warn") === expectedRuleFields.action &&
           Math.max(1, Number(updatedComparable.threshold || 1)) === expectedRuleFields.threshold &&
@@ -1180,6 +1484,10 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
             rule_name: expectedRuleFields.name || existingRule.rule_name || "AutoMod Rule",
             keyword: expectedRuleFields.keyword,
             keywords: expectedRuleFields.keywords,
+            allowed_patterns: expectedRuleFields.allowedKeywords,
+            allowed_keywords: expectedRuleFields.allowedKeywords,
+            allowedPatterns: expectedRuleFields.allowedKeywords,
+            allowedKeywords: expectedRuleFields.allowedKeywords,
             pattern: expectedRuleFields.pattern,
             action: expectedRuleFields.action,
             threshold: expectedRuleFields.threshold,
@@ -1447,6 +1755,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     }
 
     const targetRule = state.automodRules.find((rule) => getRuleId(rule) === ruleId);
+
     if (!targetRule) {
       root.innerHTML = `
         <section class="page-card">
@@ -1467,7 +1776,9 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     }
 
     const editKeywordTokens = parseCommaSeparated(state.editingRuleForm.keyword);
-    const editRegexTokens = parseCommaSeparated(state.editingRuleForm.pattern);
+    const editAllowedKeywordTokens = parseCommaSeparated(state.editingRuleForm.allowedKeywords);
+    const editRegexTokens = splitRegexPatterns(state.editingRuleForm.pattern);
+    const editorSelectedPresets = Array.isArray(state.presetSelections?.editor) ? state.presetSelections.editor : [];
     const isEditLimitExceeded = editKeywordTokens.length > MAX_WORDS || editRegexTokens.length > MAX_REGEXES;
     const editHasChanges = hasEditChanges(state);
     const settingsHasChanges = hasSettingsChanges(state);
@@ -1502,7 +1813,18 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
           <label class="automod-rule-label">
             Rule Name
-            <input name="name" value="${escapeHtml(state.editingRuleForm.name)}" data-edit-input />
+            <input name="name" value="${escapeHtml(state.editingRuleForm.name)}" list="automod-rule-name-presets" data-edit-input />
+          </label>
+
+          <label class="automod-rule-label automod-preset-control">
+            Presets
+            <div class="preset-toggle-list" role="group" aria-label="Editor presets">
+              ${RULE_NAME_PRESETS.map(
+                (name) =>
+                  `<button class="preset-toggle-btn ${editorSelectedPresets.includes(name) ? "is-active" : ""}" type="button" data-preset-toggle data-preset-context="editor" data-preset-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`
+              ).join("")}
+            </div>
+            <span class="field-hint">Click presets to toggle them on or off.</span>
           </label>
 
           <label class="automod-rule-label">
@@ -1512,15 +1834,25 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           </label>
 
           <label class="automod-rule-label">
-            Regex Patterns (comma-separated)
-            <input name="pattern" value="${escapeHtml(state.editingRuleForm.pattern)}" data-edit-input />
+            Allowed Keywords (comma-separated)
+            <input name="allowedKeywords" value="${escapeHtml(state.editingRuleForm.allowedKeywords)}" data-edit-input />
+            <span class="token-counter">${editAllowedKeywordTokens.length} allowed</span>
+          </label>
+
+          <label class="automod-rule-label">
+            Regex Patterns (comma-separated or one per line)
+            <textarea name="pattern" rows="5" data-edit-input>${escapeHtml(state.editingRuleForm.pattern)}</textarea>
+            <span class="field-hint">Use one regex per line for clear separation.</span>
             <span class="token-counter">${editRegexTokens.length} / ${MAX_REGEXES} regexes</span>
           </label>
 
           <label class="automod-rule-label">
             Action
             <select name="action" data-edit-input>
-              <option value="warn" ${state.editingRuleForm.action === "warn" ? "selected" : ""}>Warn</option>
+              ${RULE_ACTION_OPTIONS.map(
+                (action) =>
+                  `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(action.charAt(0).toUpperCase() + action.slice(1))}</option>`
+              ).join("")}
             </select>
           </label>
 
@@ -1576,6 +1908,10 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
               : ""
           }
         </div>
+
+        <datalist id="automod-rule-name-presets">
+          ${RULE_NAME_PRESETS.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("")}
+        </datalist>
       </section>
 
       ${state.statusMessage ? `<p class="subtitle">${escapeHtml(state.statusMessage)}</p>` : ""}
@@ -1589,6 +1925,33 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     if (!root) {
       return;
     }
+
+    root.querySelectorAll("[data-preset-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const context = button.getAttribute("data-preset-context") || "";
+        const presetName = button.getAttribute("data-preset-name") || "";
+        if (context !== "editor" || !presetName) {
+          return;
+        }
+
+        const selected = Array.isArray(state.presetSelections.editor)
+          ? [...state.presetSelections.editor]
+          : [];
+        const existingIndex = selected.indexOf(presetName);
+        if (existingIndex >= 0) {
+          selected.splice(existingIndex, 1);
+        } else {
+          selected.push(presetName);
+        }
+
+        state.presetSelections.editor = selected;
+        if (selected.length > 0) {
+          applyRulePresets(state.editingRuleForm, selected);
+        }
+
+        rerenderKeepingInput(renderRuleEditorContent);
+      });
+    });
 
     const backButton = document.getElementById("editor-back-rules");
     if (backButton) {
