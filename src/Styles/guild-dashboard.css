@@ -218,11 +218,15 @@
   padding: 0.8rem;
   display: grid;
   gap: 0.65rem;
+  align-content: space-between;
+  min-height: 120px;
 }
 
 .automod-rule-info {
   display: grid;
-  gap: 0.24rem;
+  gap: 0.2rem;
+  justify-items: center;
+  text-align: center;
 }
 
 .automod-rule-info h5 {
@@ -241,6 +245,7 @@
   display: flex;
   gap: 0.45rem;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .automod-rule-actions-full {

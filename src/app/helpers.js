@@ -109,42 +109,62 @@ export function getRuleId(rule = {}) {
 }
 
 export function normalizeAutomodSettings(payload = {}) {
-  const source = payload?.settings || payload?.data || payload || {};
+  const root = payload || {};
+  const data = root?.data || {};
+  const settings = root?.settings || {};
+
+  // Some endpoints return settings under different wrappers; merge all common layers.
+  const source = {
+    ...root,
+    ...data,
+    ...settings,
+  };
+
+  const commandSettings = {
+    ...(root?.command_settings || root?.commandSettings || {}),
+    ...(data?.command_settings || data?.commandSettings || {}),
+    ...(settings?.command_settings || settings?.commandSettings || {}),
+    ...(source?.command_settings || source?.commandSettings || {}),
+  };
 
   const logChannelId =
     source?.log_channel_id ||
     source?.logChannelId ||
     source?.automod_log_channel_id ||
     source?.automodLogChannelId ||
+    source?.automod_log_channel ||
+    source?.automodLogChannel ||
     source?.log_channel ||
     source?.logChannel ||
+    commandSettings?.automod_log_channel ||
+    commandSettings?.automodLogChannel ||
     "";
 
   const exemptRoles =
     source?.exempt_role_ids ||
     source?.exemptRoleIds ||
-    source?.ignored_role_ids ||
-    source?.ignoredRoleIds ||
     source?.exempt_roles ||
     source?.exemptRoles ||
+    source?.ignored_role_ids ||
+    source?.ignoredRoleIds ||
     [];
 
   const exemptChannels =
     source?.exempt_channel_ids ||
     source?.exemptChannelIds ||
-    source?.ignored_channel_ids ||
-    source?.ignoredChannelIds ||
     source?.exempt_channels ||
     source?.exemptChannels ||
+    source?.ignored_channel_ids ||
+    source?.ignoredChannelIds ||
     [];
 
   const exemptUsers =
     source?.exempt_user_ids ||
     source?.exemptUserIds ||
-    source?.ignored_user_ids ||
-    source?.ignoredUserIds ||
     source?.exempt_users ||
     source?.exemptUsers ||
+    source?.ignored_user_ids ||
+    source?.ignoredUserIds ||
     [];
 
   return {

@@ -5,6 +5,7 @@ import {
   getGuildId,
   getGuildMeta,
   getRuleId,
+  normalizeIdList,
   normalizeAutomodSettings,
   normalizeRule,
   normalizeRulesResponse,
@@ -117,6 +118,9 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         action: "warn",
         threshold: 1,
         enabled: true,
+        exemptRoleIds: "",
+        exemptChannelIds: "",
+        exemptUserIds: "",
       },
       editingOriginalForm: null,
       isSavingEdit: false,
@@ -150,6 +154,27 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       action: rule?.action || "warn",
       threshold: Math.max(1, Number(rule?.threshold || 1)),
       enabled: rule?.enabled !== false,
+      exemptRoleIds: normalizeIdList(
+        rule?.exempt_roles ||
+          rule?.exempt_role_ids ||
+          rule?.exemptRoleIds ||
+          rule?.exemptRoles ||
+          []
+      ),
+      exemptChannelIds: normalizeIdList(
+        rule?.exempt_channels ||
+          rule?.exempt_channel_ids ||
+          rule?.exemptChannelIds ||
+          rule?.exemptChannels ||
+          []
+      ),
+      exemptUserIds: normalizeIdList(
+        rule?.exempt_users ||
+          rule?.exempt_user_ids ||
+          rule?.exemptUserIds ||
+          rule?.exemptUsers ||
+          []
+      ),
     };
   }
 
@@ -161,6 +186,9 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       action: String(form.action || "warn"),
       threshold: Math.max(1, Number(form.threshold || 1)),
       enabled: Boolean(form.enabled),
+      exemptRoleIds: String(form.exemptRoleIds || "").trim(),
+      exemptChannelIds: String(form.exemptChannelIds || "").trim(),
+      exemptUserIds: String(form.exemptUserIds || "").trim(),
     };
   }
 
@@ -183,7 +211,17 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const original = toComparableEditForm(state.editingOriginalForm);
     const changed = [];
 
-    ["name", "keyword", "pattern", "action", "threshold", "enabled"].forEach((key) => {
+    [
+      "name",
+      "keyword",
+      "pattern",
+      "action",
+      "threshold",
+      "enabled",
+      "exemptRoleIds",
+      "exemptChannelIds",
+      "exemptUserIds",
+    ].forEach((key) => {
       if (current[key] !== original[key]) {
         changed.push(key);
       }
@@ -206,6 +244,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         return "threshold";
       case "enabled":
         return "status";
+      case "exemptRoleIds":
+        return "exempt roles";
+      case "exemptChannelIds":
+        return "exempt channels";
+      case "exemptUserIds":
+        return "exempt users";
       default:
         return field;
     }
@@ -274,8 +318,6 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                 const isEditing = state.editingRuleId === ruleId;
                 const isDeleting = state.deletingRuleId === ruleId;
                 const isToggling = state.togglingRuleId === ruleId;
-                const keywordValues = parseCommaSeparated(rule?.keyword || "");
-                const patternValues = parseCommaSeparated(rule?.pattern || "");
 
                 if (isEditing) {
                   return `
@@ -349,28 +391,6 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                   <article class="automod-rule-card">
                     <div class="automod-rule-info">
                       <h5>${escapeHtml(rule?.name || "Unnamed Rule")}</h5>
-                      <div>
-                        <p><strong>Keywords</strong></p>
-                        <div class="token-chip-list">
-                          ${
-                            keywordValues.length > 0
-                              ? keywordValues.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")
-                              : '<span class="token-chip muted">-</span>'
-                          }
-                        </div>
-                      </div>
-                      <div>
-                        <p><strong>Regex</strong></p>
-                        <div class="token-chip-list">
-                          ${
-                            patternValues.length > 0
-                              ? patternValues.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")
-                              : '<span class="token-chip muted">-</span>'
-                          }
-                        </div>
-                      </div>
-                      <p><strong>Action:</strong> ${escapeHtml(rule?.action || "warn")}</p>
-                      <p><strong>Status:</strong> ${rule?.enabled === false ? "Disabled" : "Enabled"}</p>
                     </div>
 
                     <div class="automod-rule-actions">
@@ -406,7 +426,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       <section class="content-section">
         <h3>AutoMod Setup</h3>
 
-        <form class="automod-settings-form" id="automod-settings-form">
+        <section class="automod-settings-form" id="automod-settings-form">
           <h4 class="automod-rules-title">Global AutoMod Settings</h4>
 
           <label class="automod-rule-label">
@@ -428,11 +448,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
             Exempt User IDs (comma-separated)
             <input name="exemptUserIds" value="${escapeHtml(state.automodSettingsForm.exemptUserIds)}" placeholder="555555555555555555, 666666666666666666" />
           </label>
-
-          <button type="submit" ${state.isSavingSettings || state.isLoadingSettings ? "disabled" : ""}>
-            ${state.isLoadingSettings ? "Loading..." : state.isSavingSettings ? "Saving..." : "Save AutoMod Settings"}
-          </button>
-        </form>
+        </section>
 
         <form class="automod-form" id="automod-create-form">
           <label class="automod-rule-label">
@@ -506,12 +522,6 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
         state.automodSettingsForm[target.name] = target.value;
       });
-
-      settingsForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        await saveSettings(guildId, state);
-        renderContent();
-      });
     }
 
     if (createForm) {
@@ -530,6 +540,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           return;
         }
 
+        await saveSettings(guildId, state);
         await createRule(guildId, state);
         renderContent();
       });
@@ -670,12 +681,34 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     renderContent();
 
     try {
+      const isSettingsEmpty = (settings) => {
+        return (
+          !settings.logChannelId &&
+          !settings.exemptRoleIds &&
+          !settings.exemptChannelIds &&
+          !settings.exemptUserIds
+        );
+      };
+
+      let fallbackSettings = null;
+
       for (const url of candidates) {
         const response = await fetch(url, { method: "GET", credentials: "include" });
         if (response.ok) {
           const payload = await response.json();
-          state.automodSettingsForm = normalizeAutomodSettings(payload);
-          return;
+          const normalized = normalizeAutomodSettings(payload);
+
+          // Keep first successful payload as fallback, but prefer the first non-empty one.
+          if (!fallbackSettings) {
+            fallbackSettings = normalized;
+          }
+
+          if (!isSettingsEmpty(normalized)) {
+            state.automodSettingsForm = normalized;
+            return;
+          }
+
+          continue;
         }
 
         if (response.status !== 404) {
@@ -683,12 +716,13 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         }
       }
 
-      state.automodSettingsForm = {
-        logChannelId: "",
-        exemptRoleIds: "",
-        exemptChannelIds: "",
-        exemptUserIds: "",
-      };
+      state.automodSettingsForm =
+        fallbackSettings || {
+          logChannelId: "",
+          exemptRoleIds: "",
+          exemptChannelIds: "",
+          exemptUserIds: "",
+        };
     } catch (error) {
       state.statusMessage = error?.message || "Failed to load AutoMod settings.";
     } finally {
@@ -705,9 +739,16 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
     const payload = {
       log_channel_id: state.automodSettingsForm.logChannelId.trim(),
+      automod_log_channel: state.automodSettingsForm.logChannelId.trim(),
       exempt_role_ids: parseCommaSeparated(state.automodSettingsForm.exemptRoleIds),
+      exempt_roles: parseCommaSeparated(state.automodSettingsForm.exemptRoleIds),
       exempt_channel_ids: parseCommaSeparated(state.automodSettingsForm.exemptChannelIds),
+      exempt_channels: parseCommaSeparated(state.automodSettingsForm.exemptChannelIds),
       exempt_user_ids: parseCommaSeparated(state.automodSettingsForm.exemptUserIds),
+      exempt_users: parseCommaSeparated(state.automodSettingsForm.exemptUserIds),
+      command_settings: {
+        automod_log_channel: state.automodSettingsForm.logChannelId.trim(),
+      },
     };
 
     const candidates = [
@@ -893,6 +934,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       action: state.editingRuleForm.action,
       threshold: Math.max(1, Number(state.editingRuleForm.threshold || 1)),
       enabled: state.editingRuleForm.enabled,
+      exempt_role_ids: parseCommaSeparated(state.editingRuleForm.exemptRoleIds),
+      exempt_roles: parseCommaSeparated(state.editingRuleForm.exemptRoleIds),
+      exempt_channel_ids: parseCommaSeparated(state.editingRuleForm.exemptChannelIds),
+      exempt_channels: parseCommaSeparated(state.editingRuleForm.exemptChannelIds),
+      exempt_user_ids: parseCommaSeparated(state.editingRuleForm.exemptUserIds),
+      exempt_users: parseCommaSeparated(state.editingRuleForm.exemptUserIds),
     };
 
     const candidates = [
@@ -1159,6 +1206,31 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
             <input name="threshold" type="number" min="1" step="1" value="${escapeHtml(state.editingRuleForm.threshold)}" data-edit-input />
           </label>
 
+          <label class="automod-rule-label">
+            Exempt Role IDs (comma-separated)
+            <input name="exemptRoleIds" value="${escapeHtml(state.editingRuleForm.exemptRoleIds)}" data-edit-input />
+          </label>
+
+          <label class="automod-rule-label">
+            Exempt Channel IDs (comma-separated)
+            <input name="exemptChannelIds" value="${escapeHtml(state.editingRuleForm.exemptChannelIds)}" data-edit-input />
+          </label>
+
+          <label class="automod-rule-label">
+            Exempt User IDs (comma-separated)
+            <input name="exemptUserIds" value="${escapeHtml(state.editingRuleForm.exemptUserIds)}" data-edit-input />
+          </label>
+
+          <label class="automod-rule-label">
+            AutoMod Log Channel ID
+            <input
+              name="logChannelId"
+              value="${escapeHtml(state.automodSettingsForm.logChannelId)}"
+              data-editor-setting
+              placeholder="123456789012345678"
+            />
+          </label>
+
           <label class="automod-enabled-label">
             <input type="checkbox" name="enabled" ${state.editingRuleForm.enabled ? "checked" : ""} data-edit-input />
             Enabled
@@ -1167,6 +1239,9 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           <div class="automod-rule-actions automod-rule-actions-full">
             <button class="action-btn" type="button" data-save-edit ${state.isSavingEdit || isEditLimitExceeded || !editHasChanges ? "disabled" : ""}>
               ${state.isSavingEdit ? "Saving..." : "Save Rule"}
+            </button>
+            <button class="action-btn secondary" type="button" data-save-settings ${state.isSavingSettings ? "disabled" : ""}>
+              ${state.isSavingSettings ? "Saving..." : "Save Log Channel"}
             </button>
             <button class="action-btn secondary" type="button" data-reset-edit ${state.isSavingEdit || !editHasChanges ? "disabled" : ""}>Reset</button>
             <button class="action-btn secondary" type="button" data-cancel-edit ${state.isSavingEdit ? "disabled" : ""}>Discard Changes</button>
@@ -1219,6 +1294,17 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       });
     });
 
+    root.querySelectorAll("[data-editor-setting]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const name = input.getAttribute("name") || "";
+        if (!name) {
+          return;
+        }
+
+        state.automodSettingsForm[name] = input.value;
+      });
+    });
+
     const saveButton = root.querySelector("[data-save-edit]");
     if (saveButton) {
       saveButton.addEventListener("click", async () => {
@@ -1255,6 +1341,14 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       });
     }
 
+    const saveSettingsButton = root.querySelector("[data-save-settings]");
+    if (saveSettingsButton) {
+      saveSettingsButton.addEventListener("click", async () => {
+        await saveSettings(guildId, state);
+        renderRuleEditorContent();
+      });
+    }
+
     root.addEventListener("keydown", async (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
@@ -1281,7 +1375,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const guildId = resolveGuildId(window.location.search);
 
     renderRuleEditorContent();
-    await loadRules(guildId, state);
+    await Promise.all([loadRules(guildId, state), loadSettings(guildId, state)]);
     renderRuleEditorContent();
   }
 
