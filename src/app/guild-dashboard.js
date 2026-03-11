@@ -124,7 +124,7 @@ const RULE_PRESET_TEMPLATES = {
 };
 
 const RULE_NAME_PRESETS = Object.keys(RULE_PRESET_TEMPLATES);
-const RULE_ACTION_OPTIONS = ["warn", "delete", "timeout", "mute", "kick", "ban"];
+const RULE_ACTION_OPTIONS = ["no_action", "warn", "delete", "timeout", "mute", "kick", "ban"];
 const MAX_STAFF_PING_ROLES = 5;
 const RULE_SEVERITY_OPTIONS = [
   { value: 1, label: "Low (log only)" },
@@ -133,6 +133,17 @@ const RULE_SEVERITY_OPTIONS = [
 ];
 
 export function createGuildDashboardController({ backendUrl, appState, defaultImage, navigate }) {
+  function formatActionLabel(action) {
+    if (action === "no_action") {
+      return "No Action";
+    }
+
+    return String(action || "")
+      .split("_")
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
   function uniqueStrings(values) {
     return Array.from(
       new Set(
@@ -644,7 +655,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                           <select name="action" data-edit-input>
                             ${RULE_ACTION_OPTIONS.map(
                               (action) =>
-                                `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(action.charAt(0).toUpperCase() + action.slice(1))}</option>`
+                                `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
                             ).join("")}
                           </select>
                         </label>
@@ -816,7 +827,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
             <select name="action">
               ${RULE_ACTION_OPTIONS.map(
                 (action) =>
-                  `<option value="${escapeHtml(action)}" ${state.automodForm.action === action ? "selected" : ""}>${escapeHtml(action.charAt(0).toUpperCase() + action.slice(1))}</option>`
+                  `<option value="${escapeHtml(action)}" ${state.automodForm.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
               ).join("")}
             </select>
           </label>
@@ -1698,13 +1709,66 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       return;
     }
 
+    const ruleKeywords = parseCommaSeparated(
+      firstDefined(rule?.keywords, rule?.keyword, [])
+    );
+    const ruleAllowedKeywords = parseCommaSeparated(
+      firstDefined(
+        rule?.allowed_patterns,
+        rule?.allowed_keywords,
+        rule?.allowedPatterns,
+        rule?.allowedKeywords,
+        []
+      )
+    );
+    const ruleExemptRoleIds = parseCommaSeparated(
+      firstDefined(
+        rule?.exempt_role_ids,
+        rule?.exempt_roles,
+        rule?.exemptRoleIds,
+        rule?.exemptRoles,
+        []
+      )
+    );
+    const ruleExemptChannelIds = parseCommaSeparated(
+      firstDefined(
+        rule?.exempt_channel_ids,
+        rule?.exempt_channels,
+        rule?.exemptChannelIds,
+        rule?.exemptChannels,
+        []
+      )
+    );
+    const ruleExemptUserIds = parseCommaSeparated(
+      firstDefined(
+        rule?.exempt_user_ids,
+        rule?.exempt_users,
+        rule?.exemptUserIds,
+        rule?.exemptUsers,
+        []
+      )
+    );
+
     const payload = {
       name: String(rule?.name || "").trim(),
       keyword: String(rule?.keyword || "").trim(),
-      keywords: parseCommaSeparated(rule?.keyword || ""),
+      keywords: ruleKeywords,
+      allowed_keywords: ruleAllowedKeywords,
+      allowed_patterns: ruleAllowedKeywords,
+      allowedKeywords: ruleAllowedKeywords,
       pattern: String(rule?.pattern || "").trim(),
       action: String(rule?.action || "warn"),
+      severity: Math.max(1, Math.min(3, Number(rule?.severity || 2))),
       threshold: Math.max(1, Number(rule?.threshold || 1)),
+      exempt_role_ids: ruleExemptRoleIds,
+      exempt_roles: ruleExemptRoleIds,
+      exemptRoleIds: ruleExemptRoleIds,
+      exempt_channel_ids: ruleExemptChannelIds,
+      exempt_channels: ruleExemptChannelIds,
+      exemptChannelIds: ruleExemptChannelIds,
+      exempt_user_ids: ruleExemptUserIds,
+      exempt_users: ruleExemptUserIds,
+      exemptUserIds: ruleExemptUserIds,
       enabled: rule?.enabled === false,
     };
 
@@ -1927,7 +1991,7 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
             <select name="action" data-edit-input>
               ${RULE_ACTION_OPTIONS.map(
                 (action) =>
-                  `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(action.charAt(0).toUpperCase() + action.slice(1))}</option>`
+                  `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
               ).join("")}
             </select>
           </label>
