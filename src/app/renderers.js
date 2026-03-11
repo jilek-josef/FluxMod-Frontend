@@ -113,7 +113,7 @@ export function renderHomePage({ isAuthenticated, fluxmodLogo }) {
           <div class="card-icon servers-icon"><i class="fa-solid fa-server"></i></div>
           <h3>Servers</h3>
           <p class="card-stat" id="home-guild-count">0</p>
-          <p class="card-label">Inactive</p>
+          <p class="card-label">Active</p>
         </div>
 
         <div class="dashboard-card">

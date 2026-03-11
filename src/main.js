@@ -35,6 +35,8 @@ const appState = {
 };
 
 let renderToken = 0;
+const GUILD_COUNT_REFRESH_MS = 10_000;
+let homeGuildCountIntervalId = null;
 
 const guildDashboardController = createGuildDashboardController({
   backendUrl,
@@ -134,7 +136,16 @@ function navigate(path) {
   window.location.assign(path);
 }
 
+function clearHomeGuildCountPolling() {
+  if (homeGuildCountIntervalId !== null) {
+    window.clearInterval(homeGuildCountIntervalId);
+    homeGuildCountIntervalId = null;
+  }
+}
+
 async function mountHomePage(token) {
+  clearHomeGuildCountPolling();
+
   const homeLogin = document.getElementById("home-login");
   if (homeLogin) {
     homeLogin.addEventListener("click", login);
@@ -145,25 +156,30 @@ async function mountHomePage(token) {
   const uptimeLabelEl = document.getElementById("home-uptime-label");
   const commitCountEl = document.getElementById("home-commit-count");
 
-  try {
-    const guildEndpoint = isLocalPage()
-      ? "http://localhost:8000/api/bot/guild-count"
-      : "https://api.fluxmod.app/api/bot/guild-count";
-    const guildResponse = await fetch(guildEndpoint, { credentials: "include" });
-    if (token !== renderToken) {
-      return;
-    }
-
-    if (guildResponse.ok) {
-      const payload = await guildResponse.json();
-      const count = Number(payload?.count);
-      if (Number.isFinite(count) && guildCountEl) {
-        guildCountEl.textContent = String(count);
+  async function refreshGuildCount() {
+    try {
+      const guildEndpoint = "https://api.fluxmod.app/api/guild-count";
+      const guildResponse = await fetch(guildEndpoint);
+      if (token !== renderToken) {
+        return;
       }
+
+      if (guildResponse.ok) {
+        const payload = await guildResponse.json();
+        const count = Number(payload?.guild_count ?? payload?.count);
+        if (Number.isFinite(count) && guildCountEl) {
+          guildCountEl.textContent = String(count);
+        }
+      }
+    } catch {
+      // Keep fallback value
     }
-  } catch {
-    // Keep fallback value
   }
+
+  void refreshGuildCount();
+  homeGuildCountIntervalId = window.setInterval(() => {
+    void refreshGuildCount();
+  }, GUILD_COUNT_REFRESH_MS);
 
   try {
     const uptimeEndpoint = isLocalPage() ? "http://localhost:8000/healthz" : "https://api.fluxmod.app/healthz";
@@ -491,6 +507,10 @@ function render() {
   renderToken += 1;
   const token = renderToken;
   const route = resolveRoute();
+
+  if (route.page !== "home") {
+    clearHomeGuildCountPolling();
+  }
 
   if (route.redirect) {
     navigate(route.redirect);
