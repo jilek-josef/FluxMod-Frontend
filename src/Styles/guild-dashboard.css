@@ -81,8 +81,14 @@
   font-size: 0.88rem;
 }
 
+.automod-preset-control {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
 .automod-rule-label input,
-.automod-rule-label select {
+.automod-rule-label select,
+.automod-rule-label textarea {
   border-radius: 10px;
   border: 1px solid rgba(149, 182, 229, 0.32);
   padding: 0.6rem 0.72rem;
@@ -91,6 +97,45 @@
   color: var(--text);
   min-height: 40px;
   line-height: 1.2;
+}
+
+.automod-rule-label textarea {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.35;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.field-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.preset-toggle-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.preset-toggle-btn {
+  border: 1px solid rgba(149, 182, 229, 0.32);
+  background: rgba(9, 17, 30, 0.86);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.3rem 0.62rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.preset-toggle-btn:hover {
+  border-color: rgba(102, 186, 255, 0.5);
+}
+
+.preset-toggle-btn.is-active {
+  border-color: rgba(102, 186, 255, 0.62);
+  background: rgba(46, 162, 255, 0.2);
+  color: #dff1ff;
 }
 
 .token-counter {
@@ -126,7 +171,8 @@
 
 .automod-form input,
 .automod-form select,
-.automod-form button {
+.automod-form textarea,
+.automod-form > button {
   border-radius: 10px;
   border: 1px solid rgba(149, 182, 229, 0.32);
   padding: 0.6rem 0.72rem;
@@ -146,7 +192,8 @@
 }
 
 .automod-form input,
-.automod-form select {
+.automod-form select,
+.automod-form textarea {
   background: rgba(9, 17, 30, 0.86);
   color: var(--text);
 }
@@ -156,7 +203,7 @@
   color: var(--text);
 }
 
-.automod-form button {
+.automod-form > button {
   background: linear-gradient(140deg, var(--accent-blue) 0%, var(--accent-darker-blue) 100%);
   color: #f5fbff;
   border-color: rgba(102, 186, 255, 0.5);
@@ -172,7 +219,7 @@
   grid-column: span 2;
 }
 
-.automod-form button:hover {
+.automod-form > button:hover {
   filter: brightness(1.07);
 }
 
@@ -309,7 +356,8 @@
 }
 
 .automod-rule-edit input,
-.automod-rule-edit select {
+.automod-rule-edit select,
+.automod-rule-edit textarea {
   border-radius: 10px;
   border: 1px solid rgba(149, 182, 229, 0.32);
   padding: 0.55rem 0.62rem;
@@ -318,6 +366,13 @@
   font: inherit;
   min-height: 40px;
   line-height: 1.2;
+}
+
+.automod-rule-edit textarea {
+  resize: vertical;
+  min-height: 96px;
+  line-height: 1.35;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .automod-enabled-label {
@@ -356,7 +411,7 @@
     grid-template-columns: 1fr;
   }
 
-  .automod-form button {
+  .automod-form > button {
     grid-column: span 1;
   }
 
