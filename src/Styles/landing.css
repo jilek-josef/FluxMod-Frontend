@@ -21,6 +21,8 @@
 .home-layout .dashboard-grid {
     width: 100%;
     margin-top: 0.2rem;
+    grid-template-columns: repeat(3, minmax(220px, 1fr)) !important;
+    align-items: stretch;
 }
 
 .title-card .fluxmod-logo {
@@ -60,6 +62,65 @@
 .title-card .login-w-fluxer:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 22px rgba(5, 14, 31, 0.34);
+}
+
+.hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.hero-link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 40px;
+    padding: 0.58rem 0.9rem;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+}
+
+.hero-link-btn-primary {
+    color: #dff7eb;
+    background: linear-gradient(140deg, rgba(35, 180, 129, 0.34) 0%, rgba(20, 130, 91, 0.34) 100%);
+    border-color: rgba(102, 245, 186, 0.4);
+}
+
+.hero-link-btn-secondary {
+    color: #e0eaff;
+    background: linear-gradient(140deg, rgba(68, 118, 219, 0.34) 0%, rgba(47, 75, 158, 0.34) 100%);
+    border-color: rgba(133, 169, 255, 0.4);
+}
+
+.hero-link-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 22px rgba(5, 14, 31, 0.34);
+    filter: brightness(1.08);
+}
+
+@media (max-width: 760px) {
+    .home-layout .dashboard-grid {
+        grid-template-columns: repeat(3, minmax(220px, 1fr)) !important;
+        overflow-x: auto;
+        padding-bottom: 0.2rem;
+    }
+
+    .hero-actions {
+        flex-direction: column;
+    }
+
+    .hero-actions .login-w-fluxer,
+    .hero-link-btn {
+        width: 100%;
+    }
 }
 
 .stat-card .hero-stat {
