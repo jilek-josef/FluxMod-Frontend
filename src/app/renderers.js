@@ -57,6 +57,17 @@ export function renderLayout({ appRoot, navLinks, pathname, isAuthLoading, user,
         </div>
       </header>
       <main class="content ${contentFluid ? "content-fluid" : ""}" id="app-content">${contentHtml}</main>
+
+      <footer class="site-footer" aria-label="Open source links">
+        <div class="site-footer-inner">
+          <p class="site-footer-title">FluxMod is open source on GitHub</p>
+          <div class="site-footer-links">
+            <a href="https://github.com/BlixedBox/FluxMod-Frontend" target="_blank" rel="noreferrer noopener">Frontend</a>
+            <a href="https://github.com/BlixedBox/FluxMod-Backend" target="_blank" rel="noreferrer noopener">Backend</a>
+            <a href="https://github.com/BlixedBox/FluxMod-Bot" target="_blank" rel="noreferrer noopener">Bot</a>
+          </div>
+        </div>
+      </footer>
     </div>
   `;
 }
@@ -67,11 +78,34 @@ export function renderHomePage({ isAuthenticated, fluxmodLogo }) {
       <section class="title-card">
         <img class="fluxmod-logo" src="${fluxmodLogo}" alt="FluxMod Logo" />
         <h1>FluxMod / Dashboard</h1>
-        <p class="title-desc">Your all-in-one AutoMod solution for Fluxer guilds.</p>
-        <button type="button" class="login-w-fluxer" id="home-login">
-          <i class="fa-solid fa-arrow-right-to-bracket"></i>
-          ${isAuthenticated ? "Switch Account" : "Login with Fluxer"}
-        </button>
+        <p class="title-desc">Your AutoMod solution for Fluxer guilds.</p>
+
+        <div class="hero-actions">
+          <button type="button" class="login-w-fluxer" id="home-login">
+            <i class="fa-solid fa-arrow-right-to-bracket"></i>
+            ${isAuthenticated ? "Switch Account" : "Login with Fluxer"}
+          </button>
+
+          <a
+            class="hero-link-btn hero-link-btn-primary"
+            href="https://web.fluxer.app/oauth2/authorize?client_id=1475487256413421606&scope=bot&permissions=4504699407788166"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <i class="fa-solid fa-user-plus"></i>
+            Invite the Bot
+          </a>
+
+          <a
+            class="hero-link-btn hero-link-btn-secondary"
+            href="https://fluxer.gg/cTPTpEsu"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            <i class="fa-solid fa-life-ring"></i>
+            Support Server
+          </a>
+        </div>
       </section>
 
       <div class="dashboard-grid">
