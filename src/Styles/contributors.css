@@ -1,71 +1,57 @@
-header {
-  text-align: center;
-  padding: 2rem 1rem;
-  border-bottom: 1px solid var(--border);
-}
-
-header h1 {
-  margin: 0;
-  font-size: 1.8rem;
-  color: var(--accent);
-}
-
-header p {
-  margin: 0.3rem 0 0;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-}
-
-/* FIXED MAIN LAYOUT */
 main {
   display: flex;
   justify-content: center;
-  padding: 2rem;
+  padding: 0;
   min-height: 70vh;
 }
 
-/* FIXED GRID CONTAINER */
 .grid-container {
   width: 100%;
-  max-width: 1000px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  max-width: 980px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
   align-items: flex-start;
-  justify-content: center;
-  padding: 1.5rem;
+  justify-content: stretch;
+  padding: 0.15rem 0;
 }
 
-/* CONTRIBUTOR CARD */
 .contributor-card {
-  background: rgba(42,42,63,0.9);
-  border: 1px solid var(--border);
-  color: var(--text-main);
-  padding: 0.8rem 1rem;
-  border-radius: 8px;
-  min-width: 160px;
-  max-width: 220px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  font-family: 'Roboto Mono', monospace;
+  background: linear-gradient(160deg, rgba(18, 29, 47, 0.95) 0%, rgba(12, 20, 34, 0.95) 100%);
+  border: 1px solid rgba(149, 182, 229, 0.25);
+  color: var(--text);
+  padding: 0.75rem;
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
-/* AVATAR */
+.contributor-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(102, 186, 255, 0.45);
+}
+
 .contributor-card img {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
   vertical-align: middle;
-  margin-right: 8px;
+  margin-right: 0.45rem;
+  border: 1px solid rgba(149, 182, 229, 0.35);
 }
 
-/* NAME */
 .contributor-name {
   font-weight: 700;
-  color: var(--text-main);
+  color: #ebf6ff;
 }
 
-/* ROLE */
 .contributor-role {
-  font-size: 0.85rem;
-  color: var(--accent);
+  font-size: 0.78rem;
+  color: var(--accent-neon);
+}
+
+@media (max-width: 760px) {
+  .grid-container {
+    grid-template-columns: 1fr;
+  }
 }

@@ -3,51 +3,63 @@
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 12px;
-    margin-bottom: 28px;
+    gap: 0.68rem;
+    margin-bottom: 1rem;
+    border-radius: 18px;
+    border: 1px solid rgba(149, 182, 229, 0.26);
+    padding: 1.1rem;
+    background: linear-gradient(160deg, rgba(17, 27, 45, 0.95) 0%, rgba(12, 21, 35, 0.95) 100%);
+    box-shadow: var(--shadow-soft);
 }
 
 .home-layout {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0.8rem;
 }
 
 .home-layout .dashboard-grid {
     width: 100%;
-    margin-top: 4px;
+    margin-top: 0.2rem;
 }
 
 .title-card .fluxmod-logo {
-    width: 120px;
+    width: 88px;
     height: auto;
-    border-radius: 50%;
+    border-radius: 16px;
+    border: 1px solid rgba(149, 182, 229, 0.36);
+    box-shadow: 0 10px 20px rgba(3, 9, 22, 0.45);
 }
 
 .title-card h1 {
-    font-size: clamp(1.8rem, 6vw, 3.2rem);
+    font-size: clamp(1.55rem, 4.5vw, 2.35rem);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     margin: 0;
 }
 
 .title-card .title-desc {
-    font-size: 1.05rem;
-    color: var(--text-secondary);
+    font-size: 0.95rem;
+    color: var(--text-muted);
     margin: 0;
 }
 
 .title-card .login-w-fluxer {
-    background: var(--accent-blue);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 10px 16px;
-    font-size: 1rem;
+    background: linear-gradient(140deg, var(--accent-blue) 0%, var(--accent-darker-blue) 100%);
+    color: #f5fbff;
+    border: 1px solid rgba(102, 186, 255, 0.45);
+    border-radius: 10px;
+    padding: 0.58rem 0.9rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .title-card .login-w-fluxer:hover {
-    background: var(--accent-blue-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 22px rgba(5, 14, 31, 0.34);
 }
 
 .stat-card .hero-stat {
@@ -56,25 +68,25 @@
 }
 .stat-card p {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.92rem;
 }
 
 .warning-banner {
-    background: rgba(255, 165, 0, 0.1);
-    border: 1px solid rgba(255, 165, 0, 0.3);
-    border-radius: 12px;
-    padding: 14px 16px;
-    margin-bottom: 14px;
+    background: linear-gradient(145deg, rgba(244, 183, 74, 0.18) 0%, rgba(198, 121, 27, 0.14) 100%);
+    border: 1px solid rgba(244, 183, 74, 0.4);
+    border-radius: 14px;
+    padding: 0.95rem;
+    margin-bottom: 0.85rem;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 0.6rem;
 }
 
 .warning-banner .dev-meta {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 0.52rem;
 }
 
 .warning-banner .warning-content {
@@ -82,9 +94,9 @@
 }
 
 .dev-giving-notice-pfp {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
 }
 
 .warning-banner .dev-name {
@@ -107,19 +119,20 @@
 }
 
 .landing-main {
-  min-height: calc(100vh - 72px);
+    min-height: calc(100vh - 86px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+    justify-content: flex-start;
   align-items: center;
 }
 
 .stat-card {
-  background: rgba(148, 163, 184, 0.08);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 14px;
+    background: linear-gradient(160deg, rgba(18, 29, 47, 0.95) 0%, rgba(12, 20, 34, 0.95) 100%);
+    border: 1px solid rgba(149, 182, 229, 0.24);
+    border-radius: 14px;
+    padding: 0.95rem;
+    margin-bottom: 0.85rem;
+    box-shadow: var(--shadow-soft);
 }
 .stat-card .stat-content {
   display: flex;
@@ -127,19 +140,14 @@
   align-items: center;
 }
 .stat-card .stat-label {
-  font-weight: 600;
-  color: var(--text);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
 }
 .stat-card .stat-value {
-  font-size: 1.5rem;
+    font-size: 1.35rem;
   font-weight: 700;
-  color: var(--text);
-}
-
-.page-card {
-  background: rgba(46, 59, 77, 0.244);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 14px;
+    color: #edf7ff;
 }

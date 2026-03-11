@@ -1,6 +1,6 @@
 # FluxMod Frontend
 
-React frontend (Vite) with route-based pages in `src/pages` and static assets in `public/`.
+Vanilla HTML/CSS/JavaScript frontend (Vite) with client-side routing in `src/main.js`.
 
 ## Features
 
@@ -27,20 +27,20 @@ The URL is stored in `localStorage` for convenience.
 
 ## Development
 
-- `src/pages/` — React JSX pages (`/`, `/dashboard`, `/info`, `/contributors`)
-- `src/components/` — shared React UI components
+- `src/main.js` — vanilla router + page rendering + auth/dashboard behavior
+- `src/Styles/` — shared styles
 - `public/` — static assets and legacy compatibility files
 - `dist/` — Vite production build output (do not edit manually)
 - `dist-legacy/` — optional Parcel legacy output
 
-### Local dev (React)
+### Local dev
 
 ```bash
 npm install
 npm run dev
 ```
 
-### Production build (React)
+### Production build
 
 ```bash
 npm run build

@@ -25,10 +25,10 @@ debugLog('server', { PORT, cwd: process.cwd() });
 app.use(express.static(path.join(__dirname, 'dist')));
 debugLog('server', { staticDir: path.join(__dirname, 'dist') });
 
-// Return custom 404 page for unknown routes
+// Unknown routes go to dedicated status page.
 app.get('*', (req, res) => {
-  debugLog('server', { route: req.originalUrl, status: 404 });
-  res.status(404).sendFile(path.join(__dirname, 'dist', '404.html'));
+  debugLog('server', { route: req.originalUrl, status: 302, redirect: '/pages/status.html?code=404' });
+  res.redirect('/pages/status.html?code=404');
 });
 
 app.listen(PORT, '0.0.0.0', () => {

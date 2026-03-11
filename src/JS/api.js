@@ -93,7 +93,7 @@ export function redirectToStatus(code) {
   }
 
   debugLog("status", "Redirecting to status page", { safeCode });
-  window.location.assign(`/status?code=${safeCode}`);
+  window.location.assign(`/pages/status.html?code=${safeCode}`);
 }
 
 export function getBackendUrl() {
