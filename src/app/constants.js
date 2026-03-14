@@ -22,6 +22,37 @@ export const LHS_THRESHOLD_MIN = 0.0;
 export const LHS_THRESHOLD_MAX = 1.0;
 export const LHS_THRESHOLD_STEP = 0.01;
 
+// Image Moderation constants
+export const IMAGE_MOD_FILTERS = [
+  { id: "general", name: "General", description: "General non-NSFW content detection", defaultThreshold: 0.2 },
+  { id: "sensitive", name: "Sensitive", description: "Mildly sensitive content", defaultThreshold: 0.8 },
+  { id: "questionable", name: "Questionable", description: "Borderline inappropriate content", defaultThreshold: 0.2 },
+  { id: "explicit", name: "Explicit", description: "Explicit NSFW content", defaultThreshold: 0.2 },
+  { id: "guro", name: "Gore/Violence", description: "Graphic violence and gore", defaultThreshold: 0.3 },
+  { id: "realistic", name: "Realistic", description: "Photorealistic image detection", defaultThreshold: 0.25 },
+  { id: "csam_check", name: "Possible-CSAM Check", description: "Possible-CSAM detection", defaultThreshold: 0.09 },
+];
+
+export const IMAGE_MOD_ACTIONS = ["delete", "warn", "kick", "ban"];
+
+// All filters disabled by default (user must explicitly enable)
+// Each filter has its own action (delete, warn, kick, ban)
+export const DEFAULT_IMAGE_MOD_SETTINGS = {
+  enabled: false,
+  scan_attachments: true,
+  scan_embeds: true,
+  filters: {
+    general: { enabled: false, threshold: 0.2, action: "delete" },
+    sensitive: { enabled: false, threshold: 0.8, action: "delete" },
+    questionable: { enabled: false, threshold: 0.2, action: "delete" },
+    explicit: { enabled: false, threshold: 0.2, action: "delete" },
+    guro: { enabled: false, threshold: 0.3, action: "delete" },
+    realistic: { enabled: false, threshold: 0.25, action: "delete" },
+    csam_check: { enabled: false, threshold: 0.09, action: "ban" },
+  },
+  log_only_mode: false,
+};
+
 export const STATUS_TEXT = {
   400: "Bad Request",
   401: "Unauthorized",

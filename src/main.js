@@ -44,6 +44,7 @@ const guildDashboardController = createGuildDashboardController({
   appState,
   defaultImage,
   navigate,
+  isDevMode: isDevMode(),
 });
 
 async function fetchWithAuthFallback(path, options = {}) {

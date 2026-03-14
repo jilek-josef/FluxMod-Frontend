@@ -4,6 +4,9 @@ import {
   MAX_WORDS, 
   LHS_CATEGORIES,
   DEFAULT_LHS_THRESHOLD,
+  IMAGE_MOD_FILTERS,
+  IMAGE_MOD_ACTIONS,
+  DEFAULT_IMAGE_MOD_SETTINGS,
 } from "./constants.js";
 import {
   escapeHtml,
@@ -21,6 +24,9 @@ import {
   normalizeLHSSettings,
   formatLHSCategoryName,
   formatLHSCategoryDescription,
+  normalizeImageModSettings,
+  formatImageModFilterName,
+  formatImageModFilterDescription,
 } from "./helpers.js";
 
 function resolveRuleId(search) {
@@ -141,7 +147,7 @@ const RULE_SEVERITY_OPTIONS = [
   { value: 3, label: "High" },
 ];
 
-export function createGuildDashboardController({ backendUrl, appState, defaultImage, navigate }) {
+export function createGuildDashboardController({ backendUrl, appState, defaultImage, navigate, isDevMode = false }) {
   function formatActionLabel(action) {
     if (action === "no_action") {
       return "No Action";
@@ -366,6 +372,18 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       isLoadingLHS: false,
       isSavingLHS: false,
       lhsExpanded: false, // UI state for collapsible section
+      // Image Moderation state
+      imageModSettings: {
+        enabled: false,
+        scan_attachments: true,
+        scan_embeds: true,
+        filters: JSON.parse(JSON.stringify(DEFAULT_IMAGE_MOD_SETTINGS.filters)),
+        log_only_mode: false,
+      },
+      imageModSettingsOriginal: null,
+      isLoadingImageMod: false,
+      isSavingImageMod: false,
+      imageModExpanded: false, // UI state for collapsible section
     };
   }
 
@@ -934,6 +952,137 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                   </button>
                 ` : ""}
               </div>
+
+              ${isDevMode ? `
+              <!-- Dev Mode Preview -->
+              <div class="dev-mode-preview">
+                <h5><i class="fa-solid fa-code"></i> Dev Mode: Settings Preview</h5>
+                <pre class="preview-content">${escapeHtml(JSON.stringify({
+                  enabled: state.lhsSettings.enabled,
+                  global_threshold: state.lhsSettings.global_threshold,
+                  action: state.lhsSettings.action,
+                  severity: state.lhsSettings.severity,
+                  log_only_mode: state.lhsSettings.logOnlyMode,
+                  categories: state.lhsSettings.categories,
+                }, null, 2))}</pre>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+          ` : ''}
+        </section>
+
+        <!-- Image Moderation Settings Section -->
+        <section class="lhs-settings-section content-section image-mod-section" id="image-mod-section">
+          <div class="lhs-header" id="image-mod-header-toggle">
+            <h4 class="automod-rules-title">
+              <i class="fa-solid fa-image"></i>
+              AI Image Moderation
+              <span class="lhs-status-badge ${state.imageModSettings.enabled ? 'enabled' : 'disabled'}">
+                ${state.imageModSettings.enabled ? 'Enabled' : 'Disabled'}
+              </span>
+            </h4>
+            <button type="button" class="action-btn secondary" id="image-mod-toggle-expand">
+              ${state.imageModExpanded ? 'Collapse' : 'Expand'}
+            </button>
+          </div>
+          
+          ${state.imageModExpanded ? `
+          <div class="lhs-content">
+            <p class="field-hint lhs-description">
+              AI Image Moderation scans images, GIFs, and videos for NSFW content using machine learning classification.
+              By default, this feature is disabled and must be explicitly enabled.
+            </p>
+
+            ${state.isLoadingImageMod ? '<p class="subtitle">Loading image moderation settings...</p>' : ''}
+            
+            <div class="lhs-form" id="image-mod-form">
+              <!-- Master Enable Toggle -->
+              <label class="automod-enabled-label lhs-master-toggle">
+                <input type="checkbox" name="imgModEnabled" ${state.imageModSettings.enabled ? "checked" : ""} />
+                <strong>Enable AI Image Moderation</strong>
+                <span class="field-hint">When enabled, images and videos will be scanned by the AI model</span>
+              </label>
+
+              <!-- Scan Settings -->
+              <div class="lhs-action-settings">
+                <label class="automod-enabled-label">
+                  <input type="checkbox" name="imgModScanAttachments" ${state.imageModSettings.scan_attachments ? "checked" : ""} />
+                  Scan Attachments
+                </label>
+                <label class="automod-enabled-label">
+                  <input type="checkbox" name="imgModScanEmbeds" ${state.imageModSettings.scan_embeds ? "checked" : ""} />
+                  Scan Embeds (Tenor, Imgur, etc.)
+                </label>
+                <label class="automod-enabled-label">
+                  <input type="checkbox" name="imgModLogOnly" ${state.imageModSettings.log_only_mode ? "checked" : ""} />
+                  Log Only Mode (no actions taken)
+                </label>
+              </div>
+
+              <!-- Detection Filters -->
+              <div class="lhs-categories">
+                <h5>Detection Filters</h5>
+                <p class="field-hint">Enable filters, set threshold (lower = more strict), and choose action per filter.</p>
+                
+                <div class="lhs-category-grid">
+                  ${IMAGE_MOD_FILTERS.map((filter) => {
+                    const filterSettings = state.imageModSettings.filters[filter.id] || { enabled: false, threshold: filter.defaultThreshold, action: "delete" };
+                    const isCsam = filter.id === 'csam_check';
+                    return `
+                      <div class="lhs-category-item ${isCsam ? 'critical' : ''}">
+                        <label class="lhs-category-toggle">
+                          <input type="checkbox" name="imgModFilter_${filter.id}" ${filterSettings.enabled ? "checked" : ""} />
+                          <span class="lhs-category-name ${isCsam ? 'critical-label' : ''}">
+                            ${isCsam ? '<i class="fa-solid fa-shield-halved"></i> ' : ''}${escapeHtml(filter.name)}
+                          </span>
+                        </label>
+                        <label class="lhs-category-threshold">
+                          <input 
+                            type="range" 
+                            name="imgModThreshold_${filter.id}" 
+                            min="0" 
+                            max="1" 
+                            step="0.01" 
+                            value="${filterSettings.threshold}" 
+                            ${!filterSettings.enabled ? 'disabled' : ''}
+                          />
+                          <span class="threshold-value">${(filterSettings.threshold * 100).toFixed(0)}%</span>
+                        </label>
+                        <label class="automod-rule-label" style="margin-top: 0.5rem;">
+                          <select name="imgModAction_${filter.id}" ${!filterSettings.enabled ? 'disabled' : ''}>
+                            ${IMAGE_MOD_ACTIONS.map(
+                              (action) =>
+                                `<option value="${escapeHtml(action)}" ${filterSettings.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                            ).join("")}
+                          </select>
+                        </label>
+                        <span class="field-hint">${escapeHtml(filter.description)}</span>
+                      </div>
+                    `;
+                  }).join("")}
+                </div>
+              </div>
+
+              <!-- Save Button -->
+              <div class="lhs-actions">
+                <button type="button" class="action-btn" id="image-mod-save-btn" ${state.isSavingImageMod ? "disabled" : ""}>
+                  ${state.isSavingImageMod ? "Saving..." : "Save Image Moderation Settings"}
+                </button>
+                ${state.imageModSettingsOriginal ? `
+                  <button type="button" class="action-btn secondary" id="image-mod-reset-btn">
+                    Reset Changes
+                  </button>
+                ` : ""}
+              </div>
+
+              ${isDevMode ? `
+              <!-- Dev Mode Preview -->
+              <div class="dev-mode-preview">
+                <h5><i class="fa-solid fa-code"></i> Dev Mode: Settings Preview</h5>
+                <pre class="preview-content">${escapeHtml(JSON.stringify(state.imageModSettings, null, 2))}</pre>
+              </div>
+              ` : ''}
             </div>
           </div>
           ` : ''}
@@ -1306,6 +1455,85 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       if (lhsResetBtn && state.lhsSettingsOriginal) {
         lhsResetBtn.addEventListener("click", () => {
           state.lhsSettings = JSON.parse(JSON.stringify(state.lhsSettingsOriginal));
+          renderContent();
+        });
+      }
+    }
+
+    // Image Moderation Event Handlers
+    const imageModHeaderToggle = document.getElementById("image-mod-header-toggle");
+    if (imageModHeaderToggle) {
+      imageModHeaderToggle.addEventListener("click", (e) => {
+        // Don't toggle if clicking on the checkbox
+        if (e.target.name === "imgModEnabled") return;
+        state.imageModExpanded = !state.imageModExpanded;
+        renderContent();
+      });
+    }
+
+    const imageModToggleExpand = document.getElementById("image-mod-toggle-expand");
+    if (imageModToggleExpand) {
+      imageModToggleExpand.addEventListener("click", (e) => {
+        e.stopPropagation();
+        state.imageModExpanded = !state.imageModExpanded;
+        renderContent();
+      });
+    }
+
+    const imageModForm = document.getElementById("image-mod-form");
+    if (imageModForm) {
+      // Handle all image moderation form inputs
+      imageModForm.addEventListener("input", (event) => {
+        const target = event.target;
+        const name = target.name;
+        
+        if (!name) return;
+
+        if (name === "imgModEnabled") {
+          state.imageModSettings.enabled = target.checked;
+        } else if (name === "imgModScanAttachments") {
+          state.imageModSettings.scan_attachments = target.checked;
+        } else if (name === "imgModScanEmbeds") {
+          state.imageModSettings.scan_embeds = target.checked;
+        } else if (name === "imgModLogOnly") {
+          state.imageModSettings.log_only_mode = target.checked;
+        } else if (name.startsWith("imgModAction_")) {
+          const filterId = name.replace("imgModAction_", "");
+          if (!state.imageModSettings.filters[filterId]) {
+            state.imageModSettings.filters[filterId] = { enabled: false, threshold: 0.2, action: "delete" };
+          }
+          state.imageModSettings.filters[filterId].action = target.value;
+        } else if (name.startsWith("imgModFilter_")) {
+          const filterId = name.replace("imgModFilter_", "");
+          if (!state.imageModSettings.filters[filterId]) {
+            state.imageModSettings.filters[filterId] = { enabled: false, threshold: 0.2 };
+          }
+          state.imageModSettings.filters[filterId].enabled = target.checked;
+        } else if (name.startsWith("imgModThreshold_")) {
+          const filterId = name.replace("imgModThreshold_", "");
+          if (!state.imageModSettings.filters[filterId]) {
+            state.imageModSettings.filters[filterId] = { enabled: false, threshold: 0.2 };
+          }
+          state.imageModSettings.filters[filterId].threshold = parseFloat(target.value);
+        }
+        
+        rerenderKeepingInput(renderContent);
+      });
+
+      // Save button
+      const imageModSaveBtn = document.getElementById("image-mod-save-btn");
+      if (imageModSaveBtn) {
+        imageModSaveBtn.addEventListener("click", async () => {
+          await saveImageModSettings(guildId, state);
+          renderContent();
+        });
+      }
+
+      // Reset button
+      const imageModResetBtn = document.getElementById("image-mod-reset-btn");
+      if (imageModResetBtn && state.imageModSettingsOriginal) {
+        imageModResetBtn.addEventListener("click", () => {
+          state.imageModSettings = JSON.parse(JSON.stringify(state.imageModSettingsOriginal));
           renderContent();
         });
       }
@@ -2555,6 +2783,56 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     }
   }
 
+  async function loadImageModSettings(guildId, state) {
+    if (!guildId) {
+      return;
+    }
+
+    state.isLoadingImageMod = true;
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/api/guilds/lhs-settings?guild_id=${encodeURIComponent(guildId)}`,
+        { method: "GET", credentials: "include" }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Image mod settings not found, use defaults (all filters disabled)
+          state.imageModSettings = {
+            enabled: false,
+            scan_attachments: true,
+            scan_embeds: true,
+            filters: JSON.parse(JSON.stringify(DEFAULT_IMAGE_MOD_SETTINGS.filters)),
+            log_only_mode: false,
+          };
+          state.imageModSettingsOriginal = null;
+          return;
+        }
+        throw new Error(`Failed to load image moderation settings (${response.status})`);
+      }
+
+      const payload = await response.json();
+      const normalized = normalizeImageModSettings(payload?.image_moderation || payload?.lhs_settings?.image_moderation);
+
+      state.imageModSettings = {
+        enabled: normalized.enabled,
+        scan_attachments: normalized.scan_attachments,
+        scan_embeds: normalized.scan_embeds,
+        filters: normalized.filters,
+
+        log_only_mode: normalized.log_only_mode,
+      };
+
+      state.imageModSettingsOriginal = JSON.parse(JSON.stringify(state.imageModSettings));
+    } catch (error) {
+      console.error("Failed to load image moderation settings:", error);
+      // Don't show error for image moderation - it's optional
+    } finally {
+      state.isLoadingImageMod = false;
+    }
+  }
+
   async function saveLHSSettings(guildId, state) {
     if (!guildId) {
       state.statusMessage = "Missing guild id.";
@@ -2609,6 +2887,49 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     }
   }
 
+  async function saveImageModSettings(guildId, state) {
+    if (!guildId) {
+      state.statusMessage = "Missing guild id.";
+      return;
+    }
+
+    const payload = {
+      image_moderation: {
+        enabled: state.imageModSettings.enabled,
+        scan_attachments: state.imageModSettings.scan_attachments,
+        scan_embeds: state.imageModSettings.scan_embeds,
+        filters: state.imageModSettings.filters,
+
+        log_only_mode: state.imageModSettings.log_only_mode,
+      },
+    };
+
+    state.isSavingImageMod = true;
+
+    try {
+      const response = await fetch(
+        `${backendUrl}/api/guilds/lhs-settings?guild_id=${encodeURIComponent(guildId)}`,
+        {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to save image moderation settings (${response.status})`);
+      }
+
+      state.statusMessage = "Image Moderation settings saved successfully.";
+      state.imageModSettingsOriginal = JSON.parse(JSON.stringify(state.imageModSettings));
+    } catch (error) {
+      state.statusMessage = error?.message || "Failed to save image moderation settings.";
+    } finally {
+      state.isSavingImageMod = false;
+    }
+  }
+
   async function mountRuleEditor() {
     const state = ensureState();
     const guildId = resolveGuildId(window.location.search);
@@ -2623,7 +2944,13 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const guildId = resolveGuildId(window.location.search);
 
     renderContent();
-    await Promise.all([loadRules(guildId, state), loadSettings(guildId, state), loadLHSSettings(guildId, state)]);
+    await Promise.all([
+      loadRules(guildId, state),
+      loadSettings(guildId, state),
+      loadLHSSettings(guildId, state),
+      loadImageModSettings(guildId, state),
+    ]);
+    renderContent();
   }
 
   return {

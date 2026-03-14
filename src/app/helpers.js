@@ -548,3 +548,92 @@ export function formatLHSCategoryDescription(categoryId) {
   };
   return descriptions[categoryId] || "";
 }
+
+// Image Moderation helpers
+
+const IMAGE_MOD_FILTER_IDS = [
+  "general",
+  "sensitive",
+  "questionable",
+  "explicit",
+  "guro",
+  "realistic",
+  "csam_check",
+];
+
+const DEFAULT_IMAGE_FILTER_SETTINGS = {
+  general: { enabled: false, threshold: 0.2, action: "delete" },
+  sensitive: { enabled: false, threshold: 0.8, action: "delete" },
+  questionable: { enabled: false, threshold: 0.2, action: "delete" },
+  explicit: { enabled: false, threshold: 0.2, action: "delete" },
+  guro: { enabled: false, threshold: 0.3, action: "delete" },
+  realistic: { enabled: false, threshold: 0.25, action: "delete" },
+  csam_check: { enabled: false, threshold: 0.09, action: "ban" },
+};
+
+function normalizeImageFilters(filters = {}) {
+  const normalized = {};
+  for (const filterId of IMAGE_MOD_FILTER_IDS) {
+    const filterData = filters[filterId] || {};
+    const defaults = DEFAULT_IMAGE_FILTER_SETTINGS[filterId];
+    normalized[filterId] = {
+      enabled: filterData.enabled === true, // Default false - must be explicitly enabled
+      threshold: Math.max(0, Math.min(1, 
+        Number(pickDefinedValue(filterData.threshold, defaults.threshold)) || defaults.threshold
+      )),
+      action: String(pickDefinedValue(filterData.action, defaults.action) || "delete"),
+    };
+  }
+  return normalized;
+}
+
+export function normalizeImageModSettings(payload = {}) {
+  const root = payload || {};
+  const data = root?.data || {};
+  const settings = root?.settings || {};
+  const img = root?.image_moderation || root?.imageModeration || {};
+  
+  // Some endpoints return settings under different wrappers
+  const source = {
+    ...root,
+    ...data,
+    ...settings,
+    ...img,
+  };
+  
+  const normalized = {
+    enabled: pickDefinedValue(source.enabled, source.image_mod_enabled, source.imageModEnabled) === true,
+    scan_attachments: pickDefinedValue(source.scan_attachments, source.scanAttachments, source.scanAttachments) !== false,
+    scan_embeds: pickDefinedValue(source.scan_embeds, source.scanEmbeds, source.scanEmbeds) !== false,
+    filters: normalizeImageFilters(source.filters),
+    log_only_mode: pickDefinedValue(source.log_only_mode, source.logOnlyMode, source.imageLogOnly) === true,
+  };
+  
+  return normalized;
+}
+
+export function formatImageModFilterName(filterId) {
+  const names = {
+    general: "General",
+    sensitive: "Sensitive",
+    questionable: "Questionable",
+    explicit: "Explicit",
+    guro: "Gore/Violence",
+    realistic: "Realistic",
+    csam_check: "CSAM Check",
+  };
+  return names[filterId] || filterId;
+}
+
+export function formatImageModFilterDescription(filterId) {
+  const descriptions = {
+    general: "General non-NSFW content detection",
+    sensitive: "Mildly sensitive content",
+    questionable: "Borderline inappropriate content",
+    explicit: "Explicit NSFW content",
+    guro: "Graphic violence and gore",
+    realistic: "Photorealistic image detection",
+    csam_check: "Possible-CSAM detection",
+  };
+  return descriptions[filterId] || "";
+}
