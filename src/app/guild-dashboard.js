@@ -125,6 +125,7 @@ const RULE_PRESET_TEMPLATES = {
 
 const RULE_NAME_PRESETS = Object.keys(RULE_PRESET_TEMPLATES);
 const RULE_ACTION_OPTIONS = ["no_action", "warn", "delete", "timeout", "mute", "kick", "ban"];
+const ESCALATION_ACTION_OPTIONS = ["timeout", "kick", "ban"];
 const MAX_STAFF_PING_ROLES = 5;
 const RULE_SEVERITY_OPTIONS = [
   { value: 1, label: "Low (log only)" },
@@ -319,6 +320,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         action: "warn",
         severity: 2,
         threshold: 1,
+        timeoutDuration: 10,
+        escalationEnabled: false,
+        escalationWarnThreshold: 1,
+        escalationAction: "timeout",
+        escalationTimeoutDuration: 10,
+        escalationResetMinutes: 0,
       },
       statusMessage: "",
       isSubmittingRule: false,
@@ -337,6 +344,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         exemptRoleIds: "",
         exemptChannelIds: "",
         exemptUserIds: "",
+        timeoutDuration: 10,
+        escalationEnabled: false,
+        escalationWarnThreshold: 1,
+        escalationAction: "timeout",
+        escalationTimeoutDuration: 10,
+        escalationResetMinutes: 0,
       },
       editingOriginalForm: null,
       isSavingEdit: false,
@@ -478,6 +491,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           []
         )
       ),
+      timeoutDuration: Math.max(1, Number(rule?.timeout_duration ?? rule?.timeoutDuration ?? 10) || 10),
+      escalationEnabled: Boolean(rule?.escalation_enabled ?? rule?.escalationEnabled ?? false),
+      escalationWarnThreshold: Math.max(1, Number(rule?.escalation_warn_threshold ?? rule?.escalationWarnThreshold ?? 1) || 1),
+      escalationAction: String(rule?.escalation_action ?? rule?.escalationAction ?? "timeout"),
+      escalationTimeoutDuration: Math.max(1, Number(rule?.escalation_timeout_duration ?? rule?.escalationTimeoutDuration ?? 10) || 10),
+      escalationResetMinutes: Math.max(0, Number(rule?.escalation_reset_minutes ?? rule?.escalationResetMinutes ?? 0) || 0),
     };
   }
 
@@ -494,6 +513,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       exemptRoleIds: String(form.exemptRoleIds || "").trim(),
       exemptChannelIds: String(form.exemptChannelIds || "").trim(),
       exemptUserIds: String(form.exemptUserIds || "").trim(),
+      timeoutDuration: Math.max(1, Number(form.timeoutDuration || 10)),
+      escalationEnabled: Boolean(form.escalationEnabled),
+      escalationWarnThreshold: Math.max(1, Number(form.escalationWarnThreshold || 1)),
+      escalationAction: String(form.escalationAction || "timeout"),
+      escalationTimeoutDuration: Math.max(1, Number(form.escalationTimeoutDuration || 10)),
+      escalationResetMinutes: Math.max(0, Number(form.escalationResetMinutes || 0)),
     };
   }
 
@@ -528,6 +553,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       "exemptRoleIds",
       "exemptChannelIds",
       "exemptUserIds",
+      "timeoutDuration",
+      "escalationEnabled",
+      "escalationWarnThreshold",
+      "escalationAction",
+      "escalationTimeoutDuration",
+      "escalationResetMinutes",
     ].forEach((key) => {
       if (current[key] !== original[key]) {
         changed.push(key);
@@ -561,6 +592,18 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         return "exempt channels";
       case "exemptUserIds":
         return "exempt users";
+      case "timeoutDuration":
+        return "timeout duration";
+      case "escalationEnabled":
+        return "escalation";
+      case "escalationWarnThreshold":
+        return "warn threshold";
+      case "escalationAction":
+        return "escalation action";
+      case "escalationTimeoutDuration":
+        return "escalation timeout";
+      case "escalationResetMinutes":
+        return "offense reset window";
       default:
         return field;
     }
@@ -855,6 +898,14 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                           </select>
                         </label>
 
+                        ${state.editingRuleForm.action === "timeout" ? `
+                        <label class="automod-rule-label">
+                          Timeout Duration (minutes)
+                          <input name="timeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.timeoutDuration || 10))}" data-edit-input />
+                          <span class="field-hint">How long the user will be timed out when this rule triggers.</span>
+                        </label>
+                        ` : ""}
+
                         <label class="automod-rule-label">
                           Severity
                           <select name="severity" data-edit-input>
@@ -871,6 +922,39 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                             state.editingRuleForm.threshold
                           )}" data-edit-input />
                         </label>
+
+                        <label class="automod-enabled-label">
+                          <input type="checkbox" name="escalationEnabled" ${state.editingRuleForm.escalationEnabled ? "checked" : ""} data-edit-input />
+                          Enable offense escalation
+                        </label>
+
+                        ${state.editingRuleForm.escalationEnabled ? `
+                        <label class="automod-rule-label">
+                          Warn Threshold
+                          <input name="escalationWarnThreshold" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationWarnThreshold || 1))}" data-edit-input />
+                          <span class="field-hint">Warnings before escalating to the action below.</span>
+                        </label>
+                        <label class="automod-rule-label">
+                          Escalation Action
+                          <select name="escalationAction" data-edit-input>
+                            ${ESCALATION_ACTION_OPTIONS.map(
+                              (action) =>
+                                `<option value="${escapeHtml(action)}" ${state.editingRuleForm.escalationAction === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                            ).join("")}
+                          </select>
+                        </label>
+                        ${state.editingRuleForm.escalationAction === "timeout" ? `
+                        <label class="automod-rule-label">
+                          Escalation Timeout Duration (minutes)
+                          <input name="escalationTimeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationTimeoutDuration || 10))}" data-edit-input />
+                        </label>
+                        ` : ""}
+                        <label class="automod-rule-label">
+                          Offense Reset Window (minutes)
+                          <input name="escalationResetMinutes" type="number" min="0" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationResetMinutes ?? 0))}" data-edit-input />
+                          <span class="field-hint">Set to 0 to never reset.</span>
+                        </label>
+                        ` : ""}
 
                         <label class="automod-enabled-label">
                           <input type="checkbox" name="enabled" ${state.editingRuleForm.enabled ? "checked" : ""} data-edit-input />
@@ -1317,6 +1401,14 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                 </select>
               </label>
 
+              ${state.automodForm.action === "timeout" ? `
+              <label class="automod-rule-label">
+                Timeout Duration (minutes)
+                <input name="timeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.automodForm.timeoutDuration || 10))}" />
+                <span class="field-hint">How long the user will be timed out when this rule triggers.</span>
+              </label>
+              ` : ""}
+
               <label class="automod-rule-label">
                 Severity
                 <select name="severity">
@@ -1327,6 +1419,48 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                 </select>
                 <span class="field-hint">Low severity only logs to staff and will not delete the message.</span>
               </label>
+            </div>
+          </section>
+
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Offense Escalation</h5>
+              <p>Automatically escalate repeat violations through a configurable punishment ladder.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-enabled-label">
+                <input type="checkbox" name="escalationEnabled" ${state.automodForm.escalationEnabled ? "checked" : ""} />
+                Enable offense escalation
+              </label>
+              ${state.automodForm.escalationEnabled ? `
+              <label class="automod-rule-label">
+                Warn Threshold
+                <input name="escalationWarnThreshold" type="number" min="1" step="1" value="${escapeHtml(String(state.automodForm.escalationWarnThreshold || 1))}" />
+                <span class="field-hint">Number of warnings to issue before escalating. After this many offenses the escalation action fires instead.</span>
+              </label>
+              <label class="automod-rule-label">
+                Escalation Action
+                <select name="escalationAction">
+                  ${ESCALATION_ACTION_OPTIONS.map(
+                    (action) =>
+                      `<option value="${escapeHtml(action)}" ${state.automodForm.escalationAction === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                  ).join("")}
+                </select>
+                <span class="field-hint">Action taken once the warn threshold is exceeded.</span>
+              </label>
+              ${state.automodForm.escalationAction === "timeout" ? `
+              <label class="automod-rule-label">
+                Escalation Timeout Duration (minutes)
+                <input name="escalationTimeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.automodForm.escalationTimeoutDuration || 10))}" />
+                <span class="field-hint">How long the timeout lasts when a user exceeds the warn threshold.</span>
+              </label>
+              ` : ""}
+              <label class="automod-rule-label">
+                Offense Reset Window (minutes)
+                <input name="escalationResetMinutes" type="number" min="0" step="1" value="${escapeHtml(String(state.automodForm.escalationResetMinutes ?? 0))}" />
+                <span class="field-hint">Minutes of good behaviour before a user's offense count resets. Set to 0 to never reset.</span>
+              </label>
+              ` : ""}
             </div>
           </section>
 
@@ -1426,6 +1560,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         state.automodForm.pattern = String(formData.get("pattern") || "");
         state.automodForm.action = String(formData.get("action") || "warn");
         state.automodForm.severity = Math.max(1, Math.min(3, Number(formData.get("severity") || 2)));
+        state.automodForm.timeoutDuration = Math.max(1, Number(formData.get("timeoutDuration") || 10));
+        state.automodForm.escalationEnabled = formData.get("escalationEnabled") === "on";
+        state.automodForm.escalationWarnThreshold = Math.max(1, Number(formData.get("escalationWarnThreshold") || 1));
+        state.automodForm.escalationAction = String(formData.get("escalationAction") || "timeout");
+        state.automodForm.escalationTimeoutDuration = Math.max(1, Number(formData.get("escalationTimeoutDuration") || 10));
+        state.automodForm.escalationResetMinutes = Math.max(0, Number(formData.get("escalationResetMinutes") || 0));
         rerenderKeepingInput(renderContent);
       });
 
@@ -1953,6 +2093,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           severity: Math.max(1, Math.min(3, Number(state.automodForm.severity || 2))),
           threshold: state.automodForm.threshold,
           enabled: true,
+          timeout_duration: Math.max(1, Number(state.automodForm.timeoutDuration || 10)),
+          escalation_enabled: Boolean(state.automodForm.escalationEnabled),
+          escalation_warn_threshold: Math.max(1, Number(state.automodForm.escalationWarnThreshold || 1)),
+          escalation_action: String(state.automodForm.escalationAction || "timeout"),
+          escalation_timeout_duration: Math.max(1, Number(state.automodForm.escalationTimeoutDuration || 10)),
+          escalation_reset_minutes: Math.max(0, Number(state.automodForm.escalationResetMinutes || 0)),
         }),
       });
 
@@ -2071,6 +2217,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       ignored_users: exemptUserIds,
       ignored_user_ids_csv: exemptUserIdsCsv,
       ignored_user_ids_nullable: exemptUserIdsNullable,
+      timeout_duration: Math.max(1, Number(state.editingRuleForm.timeoutDuration || 10)),
+      escalation_enabled: Boolean(state.editingRuleForm.escalationEnabled),
+      escalation_warn_threshold: Math.max(1, Number(state.editingRuleForm.escalationWarnThreshold || 1)),
+      escalation_action: String(state.editingRuleForm.escalationAction || "timeout"),
+      escalation_timeout_duration: Math.max(1, Number(state.editingRuleForm.escalationTimeoutDuration || 10)),
+      escalation_reset_minutes: Math.max(0, Number(state.editingRuleForm.escalationResetMinutes || 0)),
     };
 
     const expectedRuleFields = {
@@ -2638,6 +2790,14 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                 </select>
               </label>
 
+              ${state.editingRuleForm.action === "timeout" ? `
+              <label class="automod-rule-label">
+                Timeout Duration (minutes)
+                <input name="timeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.timeoutDuration || 10))}" data-edit-input />
+                <span class="field-hint">How long the user will be timed out when this rule triggers.</span>
+              </label>
+              ` : ""}
+
               <label class="automod-rule-label">
                 Severity
                 <select name="severity" data-edit-input>
@@ -2653,6 +2813,48 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                 Threshold
                 <input name="threshold" type="number" min="1" step="1" value="${escapeHtml(state.editingRuleForm.threshold)}" data-edit-input />
               </label>
+            </div>
+          </section>
+
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Offense Escalation</h5>
+              <p>Automatically escalate repeat violations through a configurable punishment ladder.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-enabled-label">
+                <input type="checkbox" name="escalationEnabled" ${state.editingRuleForm.escalationEnabled ? "checked" : ""} data-edit-input />
+                Enable offense escalation
+              </label>
+              ${state.editingRuleForm.escalationEnabled ? `
+              <label class="automod-rule-label">
+                Warn Threshold
+                <input name="escalationWarnThreshold" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationWarnThreshold || 1))}" data-edit-input />
+                <span class="field-hint">Number of warnings to issue before escalating. After this many offenses the escalation action fires instead.</span>
+              </label>
+              <label class="automod-rule-label">
+                Escalation Action
+                <select name="escalationAction" data-edit-input>
+                  ${ESCALATION_ACTION_OPTIONS.map(
+                    (action) =>
+                      `<option value="${escapeHtml(action)}" ${state.editingRuleForm.escalationAction === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                  ).join("")}
+                </select>
+                <span class="field-hint">Action taken once the warn threshold is exceeded.</span>
+              </label>
+              ${state.editingRuleForm.escalationAction === "timeout" ? `
+              <label class="automod-rule-label">
+                Escalation Timeout Duration (minutes)
+                <input name="escalationTimeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationTimeoutDuration || 10))}" data-edit-input />
+                <span class="field-hint">How long the timeout lasts when a user exceeds the warn threshold.</span>
+              </label>
+              ` : ""}
+              <label class="automod-rule-label">
+                Offense Reset Window (minutes)
+                <input name="escalationResetMinutes" type="number" min="0" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationResetMinutes ?? 0))}" data-edit-input />
+                <span class="field-hint">Minutes of good behaviour before a user's offense count resets. Set to 0 to never reset.</span>
+              </label>
+              ` : ""}
             </div>
           </section>
 

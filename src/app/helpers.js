@@ -208,6 +208,24 @@ export function normalizeRule(rule = {}) {
     keyword,
     allowedKeywords,
     pattern,
+    timeoutDuration: Number(
+      rule?.timeout_duration ?? rule?.timeoutDuration ?? 10
+    ) || 10,
+    escalationEnabled: Boolean(
+      rule?.escalation_enabled ?? rule?.escalationEnabled ?? false
+    ),
+    escalationWarnThreshold: Math.max(1, Number(
+      rule?.escalation_warn_threshold ?? rule?.escalationWarnThreshold ?? 1
+    ) || 1),
+    escalationAction: String(
+      rule?.escalation_action ?? rule?.escalationAction ?? "timeout"
+    ),
+    escalationTimeoutDuration: Number(
+      rule?.escalation_timeout_duration ?? rule?.escalationTimeoutDuration ?? 10
+    ) || 10,
+    escalationResetMinutes: Math.max(0, Number(
+      rule?.escalation_reset_minutes ?? rule?.escalationResetMinutes ?? 0
+    ) || 0),
   };
 }
 
