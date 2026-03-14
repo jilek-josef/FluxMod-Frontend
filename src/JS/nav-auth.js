@@ -1,11 +1,25 @@
 import { apiCall, debugLog, getBackendUrl } from "./api.js";
-import { showLoggedIn, showLoggedOut } from "./auth.js";
+import { showLoggedIn, showLoggedOut, showDevMode } from "./auth.js";
+import { isDevMode, getMockUser } from "./dev-mode.js";
 
 const backendUrl = getBackendUrl();
 debugLog("nav-auth", "Navigation auth module initialized", { backendUrl });
 
 async function hydrateNavAuth() {
   debugLog("nav-auth", "Hydrating navbar auth state");
+  
+  // Check for dev mode
+  if (isDevMode()) {
+    debugLog("nav-auth", "Developer mode enabled - using mock user");
+    const user = getMockUser();
+    showDevMode(user, () => {
+      debugLog("nav-auth", "Logout clicked (dev mode - no-op)");
+      // In dev mode, logout just reloads the page
+      window.location.reload();
+    });
+    return;
+  }
+  
   try {
     const meResponse = await apiCall(backendUrl, "/api/me");
 

@@ -1,6 +1,7 @@
 import { apiCall, debugLog, getBackendUrl } from "./api.js";
-import { showLoggedIn } from "./auth.js";
+import { showLoggedIn, showDevMode } from "./auth.js";
 import { getRulePayloadFromForm, renderGuilds } from "./dashboard.js";
+import { isDevMode, getMockUser, getMockGuilds } from "./dev-mode.js";
 
 const backendUrl = getBackendUrl();
 debugLog("main", "Main dashboard module initialized", { backendUrl });
@@ -10,6 +11,29 @@ async function checkAuth() {
   const statusSection = document.getElementById("status");
 
   try {
+    // Check for dev mode
+    if (isDevMode()) {
+      debugLog("main", "Developer mode enabled - using mock data");
+      const user = getMockUser();
+      const guilds = getMockGuilds();
+      
+      debugLog("main", "Mock user loaded", {
+        userId: user?.id,
+        username: user?.username,
+      });
+      debugLog("main", "Mock guilds loaded", { count: guilds?.length ?? 0 });
+
+      showDevMode(user, () => {
+        debugLog("main", "Logout clicked (dev mode - no-op)");
+        // In dev mode, logout just reloads the page
+        window.location.reload();
+      });
+
+      renderGuilds(guilds);
+      statusSection.innerHTML = '<p class="muted">Developer Mode - Mock Data</p>';
+      return;
+    }
+
     const meResponse = await apiCall(backendUrl, "/api/me");
 
     if (meResponse.status === 401) {

@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Set default dev mode (can be overridden at runtime)
+ENV VITE_DEV_MODE=false
+
 # Copy package files
 COPY package*.json ./
 

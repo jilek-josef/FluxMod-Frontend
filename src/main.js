@@ -24,6 +24,7 @@ import {
   renderTermsPage,
 } from "./app/renderers.js";
 import { createGuildDashboardController } from "./app/guild-dashboard.js";
+import { isDevMode, getMockUser, getMockGuilds } from "./JS/dev-mode.js";
 
 const backendUrl = getBackendUrl();
 const appRoot = document.getElementById("root");
@@ -94,6 +95,15 @@ async function hydrateAuth() {
   appState.isAuthLoading = true;
   render();
 
+  // Check for developer mode (bypass OAuth)
+  if (isDevMode()) {
+    console.log('[FluxMod] Developer mode enabled - using mock user');
+    appState.user = getMockUser();
+    appState.isAuthLoading = false;
+    render();
+    return;
+  }
+
   try {
     const response = await fetchWithAuthFallback("/api/me");
 
@@ -117,11 +127,22 @@ async function hydrateAuth() {
 }
 
 function login() {
+  // In dev mode, just reload to trigger dev mode again
+  if (isDevMode()) {
+    window.location.reload();
+    return;
+  }
   const frontendUrl = encodeURIComponent(window.location.origin);
   window.location.href = `${backendUrl}/login?frontendUrl=${frontendUrl}`;
 }
 
 async function logout() {
+  // In dev mode, just reload
+  if (isDevMode()) {
+    window.location.reload();
+    return;
+  }
+
   try {
     await fetchWithAuthFallback("/logout");
   } catch (error) {
@@ -569,6 +590,7 @@ function render() {
     user: appState.user,
     contentHtml: pageHtml,
     contentFluid: route.contentFluid,
+    isDevMode: isDevMode(),
   });
 
   const loginButton = document.getElementById("login");

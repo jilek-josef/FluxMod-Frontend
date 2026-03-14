@@ -37,9 +37,31 @@ export function showLoggedIn(user, onLogout) {
   setDashboardNavVisibility(true);
 
   const username = user.username || user.id || "User";
-  authArea.innerHTML = `<span class="user-info">${user}</span><button id="logout" class="auth-btn logout-btn">Logout</button>`;
+  authArea.innerHTML = `<span class="user-info">${username}</span><button id="logout" class="auth-btn logout-btn">Logout</button>`;
   document.getElementById("logout").onclick = () => {
     debugLog("auth", "Logout button clicked");
+    onLogout();
+  };
+
+  if (dashboardSection) {
+    dashboardSection.style.display = "block";
+  }
+}
+
+export function showDevMode(user, onLogout) {
+  debugLog("auth", "Rendering dev mode state", {
+    userId: user?.id,
+    username: user?.username,
+  });
+  const authArea = document.getElementById("auth-area");
+  const dashboardSection = document.getElementById("dashboard");
+
+  setDashboardNavVisibility(true);
+
+  const username = user.username || user.id || "User";
+  authArea.innerHTML = `<span class="user-info">${username}</span><span class="dev-mode-badge">DEV</span><button id="logout" class="auth-btn logout-btn">Logout</button>`;
+  document.getElementById("logout").onclick = () => {
+    debugLog("auth", "Logout button clicked in dev mode");
     onLogout();
   };
 

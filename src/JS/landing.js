@@ -1,5 +1,9 @@
 import { apiCall, debugLog, getBackendUrl } from "./api.js";
 import { showLoggedOut } from "./auth.js";
+import { isDevMode } from "./dev-mode.js";
+
+// DEBUG
+console.log('[FluxMod] landing.js loading, isDevMode:', isDevMode());
 
 const backendUrl = getBackendUrl();
 debugLog("landing", "Landing module initialized", { backendUrl });
@@ -9,6 +13,13 @@ async function renderProtectedGuilds() {
   const countElement = document.getElementById("protected-guilds-count");
   if (!countElement) {
     debugLog("landing", "No protected guild count element found");
+    return;
+  }
+
+  // In dev mode, show mock count
+  if (isDevMode()) {
+    debugLog("landing", "Developer mode - showing mock guild count");
+    countElement.textContent = "2";
     return;
   }
 
@@ -30,6 +41,13 @@ async function renderProtectedGuilds() {
 async function checkLandingAuth() {
   debugLog("landing", "Checking landing auth status");
   const statusSection = document.getElementById("status");
+
+  // In dev mode, redirect to dashboard immediately
+  if (isDevMode()) {
+    debugLog("landing", "Developer mode enabled - redirecting to dashboard");
+    window.location.href = "./dashboard.html";
+    return;
+  }
 
   try {
     const meResponse = await apiCall(backendUrl, "/api/me");

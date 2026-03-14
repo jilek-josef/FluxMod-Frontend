@@ -25,12 +25,14 @@ export function isRouteActive(routePath, exact, currentPathname) {
   return normalizedPathname.startsWith(routePath);
 }
 
-export function renderLayout({ appRoot, navLinks, pathname, isAuthLoading, user, contentHtml, contentFluid }) {
+export function renderLayout({ appRoot, navLinks, pathname, isAuthLoading, user, contentHtml, contentFluid, isDevMode }) {
   const isAuthenticated = Boolean(user);
   const authArea = isAuthLoading
     ? `<span class="user-info">Checking session...</span>`
     : isAuthenticated
-      ? `<button type="button" id="logout" class="auth-btn logout-btn">Logout</button>`
+      ? isDevMode
+        ? `<span class="user-info">${escapeHtml(user.username || user.id || "Dev")}</span><span class="dev-mode-badge">DEV</span><button type="button" id="logout" class="auth-btn logout-btn">Logout</button>`
+        : `<button type="button" id="logout" class="auth-btn logout-btn">Logout</button>`
       : `<button type="button" id="login" class="auth-btn">Login</button>`;
 
   const dashboardLink = isAuthenticated
