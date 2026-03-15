@@ -1,88 +1,104 @@
 # FluxMod Frontend
 
-Vanilla HTML/CSS/JavaScript frontend (Vite) with client-side routing in `src/main.js`.
+A modern, professional React-based dashboard for managing FluxMod AutoMod rules and settings.
 
 ## Features
 
-- OAuth login (Fluxer)
-- Separate landing/login page and dashboard page
-- View guilds and rules
-- Create, update, delete rules
-- Simple, lightweight UI
+- **React 18** with modern hooks and patterns
+- **Chakra UI** for professional, accessible components
+- **Light & Dark Mode** - Full theme support with system preference detection
+- **Responsive Design** - Works on desktop, tablet, and mobile
+- **OAuth Integration** - Secure Fluxer authentication
+- **Real-time Stats** - Live guild count, uptime, and commit activity
+- **Dev Mode** - Local development without OAuth (set `VITE_DEV_MODE=true`)
+
+## Tech Stack
+
+- React 18 + Vite
+- Chakra UI + Framer Motion
+- React Router DOM
+- React Icons
+
+## Color Scheme
+
+The professional color palette uses:
+
+- **Primary**: Brand Blue (#0ea5e9 to #0284c7)
+- **Accent**: Emerald Green (#22c55e to #16a34a) 
+- **Danger**: Red for destructive actions
+- **Warning**: Amber for caution states
+- **Slate**: Professional grays for neutrals
+
+Both light and dark modes are fully supported.
 
 ## Setup
 
-1. Install dependencies: `npm install`
-2. Run locally: `npm run dev`
-3. Build for production: `npm run build`
-4. Serve built output from `dist/`
-
-## Configuration
-
-The dashboard prompts for the backend URL on first load:
-- Example: `http://localhost:8000` (local dev)
-- Example: `https://api.example.com` (production)
-
-The URL is stored in `localStorage` for convenience.
-
-## Development
-
-- `src/main.js` — vanilla router + page rendering + auth/dashboard behavior
-- `src/Styles/` — shared styles
-- `public/` — static assets and legacy compatibility files
-- `dist/` — Vite production build output (do not edit manually)
-- `dist-legacy/` — optional Parcel legacy output
-
-### Local dev
-
+1. Install dependencies:
 ```bash
 npm install
+```
+
+2. Run locally:
+```bash
 npm run dev
 ```
 
-### Production build
-
+3. Build for production:
 ```bash
 npm run build
 ```
 
-### Legacy pages (optional during migration)
-
+4. Preview production build:
 ```bash
-npm run legacy:dev
-npm run legacy:build
+npm run preview
 ```
 
-## Deployment Options
+## Development Mode
 
-### GitHub Pages
+To bypass OAuth during local development:
 
-1. Push repo to GitHub
-2. Enable GitHub Pages in repo settings
-3. Point to `frontend/` directory
-4. Update backend URL when prompted
+```bash
+VITE_DEV_MODE=true npm run dev
+```
 
-### Render
+This will use mock user data instead of requiring Fluxer authentication.
 
-1. Connect repo to Render
-2. Set base directory to `frontend/`
-3. Build command: `npm run build`
-4. Publish directory: `dist`
-5. Deploy and update backend URL
+## Project Structure
 
-### Simple Static Host
+```
+src/
+  components/     # Reusable UI components
+  context/        # React context providers
+  hooks/          # Custom React hooks
+  pages/          # Page components
+  theme/          # Chakra UI theme config
+  utils/          # Helper functions and API
+```
 
-Upload contents of `dist/` to any static host (AWS S3, Azure Blob Storage, etc).
+## Pages
+
+- `/` - Home/Landing page with stats and features
+- `/pages/dashboard.html` - Guild selection dashboard
+- `/pages/guild-dashboard.html` - Guild AutoMod management
+- `/pages/contributors.html` - Project contributors
+- `/pages/terms.html` - Terms of Service
+- `/pages/privacy.html` - Privacy Policy
+- `/pages/status.html` - HTTP status pages
 
 ## API Integration
 
-The frontend calls these endpoints on the backend:
+The frontend connects to the FluxMod backend API:
 
-- `GET /api/me` — check if logged in
-- `GET /api/guilds` — list guilds
-- `GET /api/guilds/{guild_id}/rules` — list rules for a guild
-- `POST /api/guilds/{guild_id}/rules` — create rule
-- `GET /login` — OAuth redirect
-- `POST /logout` — clear session
+- `GET /api/me` - Current user info
+- `GET /api/guilds` - User's guilds
+- `GET /api/guilds/{id}/rules` - Guild AutoMod rules
+- `POST /api/guilds/{id}/rules` - Create rule
+- `PUT /api/guilds/{id}/rules/{ruleId}` - Update rule
+- `DELETE /api/guilds/{id}/rules/{ruleId}` - Delete rule
+- `POST /api/guilds/{id}/rules/{ruleId}/toggle` - Enable/disable rule
+- `GET /api/guilds/{id}/settings` - Guild settings
+- `PUT /api/guilds/{id}/settings` - Update settings
 
-All endpoints require authentication except `/login`.
+## License
+
+ISC
