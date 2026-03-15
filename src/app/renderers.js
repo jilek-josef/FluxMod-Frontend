@@ -59,7 +59,7 @@ export function renderLayout({ appRoot, navLinks, pathname, isAuthLoading, user,
         </div>
       </header>
       <main class="content ${contentFluid ? "content-fluid" : ""}" id="app-content">${contentHtml}</main>
-
+      <br><br>
       <footer class="site-footer" aria-label="Open source links">
         <div class="site-footer-inner">
           <p class="site-footer-title">FluxMod is open source on GitHub</p>
@@ -251,21 +251,38 @@ export function renderDashboardPage(user, defaultImage) {
       return left.canOpenGuild ? -1 : 1;
     });
 
+  const botGuildIds = new Set(
+    Array.isArray(user?.botGuilds)
+      ? user.botGuilds.map((botGuild) => String(botGuild?.id || ""))
+      : []
+  );
+
   const cards = sortedGuilds
     .map(({ guild, canOpenGuild }) => {
       const guildId = getGuildId(guild);
       const guildName = getGuildName(guild);
+      const botInstalled = botGuildIds.has(String(guildId));
       const disabledClass = canOpenGuild ? "" : "dashboard-card-disabled";
+      const botPresentClass = botInstalled ? "dashboard-card-bot-present" : "dashboard-card-no-bot";
       const blockedReason = !canOpenGuild
         ? `<p class="card-label blocked-reason">Owner/Admin required</p>`
         : "";
 
+      const inviteUrl = guildId
+        ? `https://web.fluxer.app/oauth2/authorize?client_id=1475487256413421606&scope=bot&permissions=4504699407788166&guild_id=${encodeURIComponent(guildId)}`
+        : "https://web.fluxer.app/oauth2/authorize?client_id=1475487256413421606&scope=bot&permissions=4504699407788166";
+
+      const inviteAction = !botInstalled
+        ? `<a class="dashboard-card-add-btn" href="${escapeHtml(inviteUrl)}" target="_blank" rel="noreferrer noopener">Add FluxMod</a>`
+        : "";
+
       return `
-        <div class="dashboard-card ${disabledClass}" data-guild-id="${escapeHtml(guildId)}" data-open="${canOpenGuild}" aria-disabled="${!canOpenGuild}">
+        <div class="dashboard-card ${disabledClass} ${botPresentClass}" data-guild-id="${escapeHtml(guildId)}" data-open="${canOpenGuild && botInstalled}" aria-disabled="${!canOpenGuild}">
           <img class="guild-icon-image" src="${getGuildIconUrl(guild, defaultImage)}" alt="${escapeHtml(guildName)} icon" loading="lazy" data-fallback-image="true" />
           <h3>${escapeHtml(guildName)}</h3>
           <p class="card-label">ID: ${escapeHtml(guildId || "Unavailable")}</p>
           ${blockedReason}
+          ${inviteAction}
         </div>
       `;
     })
@@ -278,7 +295,7 @@ export function renderDashboardPage(user, defaultImage) {
       <aside class="sidebar">
         <nav class="sidebar-nav">
           <div class="nav-section">
-            <p class="nav-label">Welcome back</p>
+            <p class="nav-label">Username</p>
             <div class="user-profile">
               <img class="user-pfp" src="${getUserPfpUrl(user || {}, defaultImage)}" alt="${escapeHtml(username)} profile" loading="lazy" data-fallback-image="true" />
               <p class="user-greeting">${escapeHtml(username)}</p>
@@ -290,8 +307,6 @@ export function renderDashboardPage(user, defaultImage) {
             <ul>
               <li><a class="sidebar-active"><i class="fa-solid fa-server"></i><span>Servers</span></a></li>
             </ul>
-            <span class="section-title">AutoMod Features</span>
-            <a class="sidebar-nav"><i class="fa-solid fa-file-shield"></i><span>Audit Logs</span></a>
           </div>
         </nav>
       </aside>
@@ -309,6 +324,7 @@ export function renderDashboardPage(user, defaultImage) {
 export function renderGuildDashboardPage() {
   return `
     <section class="dashboard guild-dashboard-layout">
+      <aside class="sidebar guild-dashboard-sidebar" id="guild-dashboard-sidebar"></aside>
       <main class="main-content guild-settings-page" id="guild-dashboard-root"></main>
     </section>
   `;
@@ -317,6 +333,7 @@ export function renderGuildDashboardPage() {
 export function renderRuleEditorPage() {
   return `
     <section class="dashboard guild-dashboard-layout">
+      <aside class="sidebar guild-dashboard-sidebar" id="guild-rule-editor-sidebar"></aside>
       <main class="main-content guild-settings-page" id="guild-rule-editor-root"></main>
     </section>
   `;

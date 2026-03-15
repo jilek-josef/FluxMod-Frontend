@@ -1,7 +1,7 @@
-import { 
-  MAX_AUTOMOD_RULES, 
-  MAX_REGEXES, 
-  MAX_WORDS, 
+import {
+  MAX_AUTOMOD_RULES,
+  MAX_REGEXES,
+  MAX_WORDS,
   LHS_CATEGORIES,
   DEFAULT_LHS_THRESHOLD,
   IMAGE_MOD_FILTERS,
@@ -140,6 +140,7 @@ const RULE_PRESET_TEMPLATES = {
 
 const RULE_NAME_PRESETS = Object.keys(RULE_PRESET_TEMPLATES);
 const RULE_ACTION_OPTIONS = ["no_action", "warn", "delete", "timeout", "mute", "kick", "ban"];
+const ESCALATION_ACTION_OPTIONS = ["timeout", "kick", "ban"];
 const MAX_STAFF_PING_ROLES = 5;
 const RULE_SEVERITY_OPTIONS = [
   { value: 1, label: "Low (log only)" },
@@ -147,7 +148,30 @@ const RULE_SEVERITY_OPTIONS = [
   { value: 3, label: "High" },
 ];
 
-export function createGuildDashboardController({ backendUrl, appState, defaultImage, navigate, isDevMode = false }) {
+const SETTINGS_PAGE_DEFS = [
+  { key: "automod", label: "AutoMod", icon: "fa-shield-halved" },
+  { key: "antispam", label: "Anti Spam", icon: "fa-comment-slash" },
+  { key: "antiraid", label: "Anti Raid", icon: "fa-user-shield" },
+  { key: "antinuke", label: "Anti Nuke", icon: "fa-bomb" },
+];
+
+function resolveSettingsPage(search) {
+  const params = new URLSearchParams(search);
+  const raw = String(params.get("page") || params.get("section") || "automod")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+
+  return SETTINGS_PAGE_DEFS.some((entry) => entry.key === raw) ? raw : "automod";
+}
+
+function buildGuildDashboardUrl(guildId, pageKey) {
+  const params = new URLSearchParams();
+  params.set("guild_id", String(guildId || "").trim());
+  params.set("page", pageKey || "automod");
+  return `/pages/guild-dashboard.html?${params.toString()}`;
+}
+
+export function createGuildDashboardController({ backendUrl, appState, defaultImage, navigate }) {
   function formatActionLabel(action) {
     if (action === "no_action") {
       return "No Action";
@@ -281,6 +305,14 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
     target.focus();
 
+    if (target instanceof HTMLInputElement && snapshot.type === "number") {
+      // Number inputs do not reliably support setSelectionRange; reset value to keep caret at the end.
+      const currentValue = target.value;
+      target.value = "";
+      target.value = currentValue;
+      return;
+    }
+
     if (
       (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
       snapshot.selectionStart !== null &&
@@ -311,6 +343,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         action: "warn",
         severity: 2,
         threshold: 1,
+        timeoutDuration: 10,
+        escalationEnabled: false,
+        escalationWarnThreshold: 1,
+        escalationAction: "timeout",
+        escalationTimeoutDuration: 10,
+        escalationResetMinutes: 0,
       },
       statusMessage: "",
       isSubmittingRule: false,
@@ -329,6 +367,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         exemptRoleIds: "",
         exemptChannelIds: "",
         exemptUserIds: "",
+        timeoutDuration: 10,
+        escalationEnabled: false,
+        escalationWarnThreshold: 1,
+        escalationAction: "timeout",
+        escalationTimeoutDuration: 10,
+        escalationResetMinutes: 0,
       },
       editingOriginalForm: null,
       isSavingEdit: false,
@@ -340,6 +384,30 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         exemptRoleIds: "",
         exemptChannelIds: "",
         exemptUserIds: "",
+        antiSpamEnabled: true,
+        antiSpamMaxMessages: 5,
+        antiSpamWindowSeconds: 3,
+        antiSpamAlertCooldown: 10,
+        antiSpamTimeoutEnabled: true,
+        antiSpamTimeoutDuration: 30,
+        antiSpamLogChannelId: "",
+        antiSpamStaffRoleIds: "",
+        antiRaidEnabled: true,
+        antiRaidJoinThreshold: 8,
+        antiRaidWindowSeconds: 12,
+        antiRaidAlertCooldown: 30,
+        antiRaidTimeoutEnabled: true,
+        antiRaidTimeoutDuration: 30,
+        antiRaidLogChannelId: "",
+        antiRaidStaffRoleIds: "",
+        antiNukeEnabled: true,
+        antiNukeActionThreshold: 3,
+        antiNukeWindowSeconds: 15,
+        antiNukeAlertCooldown: 20,
+        antiNukeTimeoutEnabled: true,
+        antiNukeTimeoutDuration: 30,
+        antiNukeLogChannelId: "",
+        antiNukeStaffRoleIds: "",
       },
       automodSettingsOriginal: {
         logChannelId: "",
@@ -347,6 +415,30 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         exemptRoleIds: "",
         exemptChannelIds: "",
         exemptUserIds: "",
+        antiSpamEnabled: true,
+        antiSpamMaxMessages: 5,
+        antiSpamWindowSeconds: 3,
+        antiSpamAlertCooldown: 10,
+        antiSpamTimeoutEnabled: true,
+        antiSpamTimeoutDuration: 30,
+        antiSpamLogChannelId: "",
+        antiSpamStaffRoleIds: "",
+        antiRaidEnabled: true,
+        antiRaidJoinThreshold: 8,
+        antiRaidWindowSeconds: 12,
+        antiRaidAlertCooldown: 30,
+        antiRaidTimeoutEnabled: true,
+        antiRaidTimeoutDuration: 30,
+        antiRaidLogChannelId: "",
+        antiRaidStaffRoleIds: "",
+        antiNukeEnabled: true,
+        antiNukeActionThreshold: 3,
+        antiNukeWindowSeconds: 15,
+        antiNukeAlertCooldown: 20,
+        antiNukeTimeoutEnabled: true,
+        antiNukeTimeoutDuration: 30,
+        antiNukeLogChannelId: "",
+        antiNukeStaffRoleIds: "",
       },
       isLoadingSettings: false,
       isSavingSettings: false,
@@ -406,6 +498,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
   }
 
   function toRuleEditForm(rule = {}) {
+    const escalation = rule?.escalation || rule?.offense_escalation || rule?.offenseEscalation || {};
+
     return {
       name: rule?.name || "",
       keyword: rule?.keyword || "",
@@ -450,6 +544,64 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           []
         )
       ),
+      timeoutDuration: Math.max(1, Number(rule?.timeout_duration ?? rule?.timeoutDuration ?? 10) || 10),
+      escalationEnabled: Boolean(
+        rule?.escalation_enabled ??
+          rule?.escalationEnabled ??
+          rule?.offense_escalation_enabled ??
+          rule?.offenseEscalationEnabled ??
+          escalation?.enabled ??
+          escalation?.is_enabled ??
+          false
+      ),
+      escalationWarnThreshold: Math.max(
+        1,
+        Number(
+          rule?.escalation_warn_threshold ??
+            rule?.escalationWarnThreshold ??
+            rule?.offense_escalation_warn_threshold ??
+            rule?.offenseEscalationWarnThreshold ??
+            rule?.warn_threshold ??
+            rule?.warnThreshold ??
+            escalation?.warn_threshold ??
+            escalation?.warnThreshold ??
+            1
+        ) || 1
+      ),
+      escalationAction: String(
+        rule?.escalation_action ??
+          rule?.escalationAction ??
+          rule?.offense_escalation_action ??
+          rule?.offenseEscalationAction ??
+          escalation?.action ??
+          "timeout"
+      ),
+      escalationTimeoutDuration: Math.max(
+        1,
+        Number(
+          rule?.escalation_timeout_duration ??
+            rule?.escalationTimeoutDuration ??
+            rule?.offense_escalation_timeout_duration ??
+            rule?.offenseEscalationTimeoutDuration ??
+            escalation?.timeout_duration ??
+            escalation?.timeoutDuration ??
+            10
+        ) || 10
+      ),
+      escalationResetMinutes: Math.max(
+        0,
+        Number(
+          rule?.escalation_reset_minutes ??
+            rule?.escalationResetMinutes ??
+            rule?.offense_escalation_reset_minutes ??
+            rule?.offenseEscalationResetMinutes ??
+            rule?.reset_minutes ??
+            rule?.resetMinutes ??
+            escalation?.reset_minutes ??
+            escalation?.resetMinutes ??
+            0
+        ) || 0
+      ),
     };
   }
 
@@ -466,6 +618,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       exemptRoleIds: String(form.exemptRoleIds || "").trim(),
       exemptChannelIds: String(form.exemptChannelIds || "").trim(),
       exemptUserIds: String(form.exemptUserIds || "").trim(),
+      timeoutDuration: Math.max(1, Number(form.timeoutDuration || 10)),
+      escalationEnabled: Boolean(form.escalationEnabled),
+      escalationWarnThreshold: Math.max(1, Number(form.escalationWarnThreshold || 1)),
+      escalationAction: String(form.escalationAction || "timeout"),
+      escalationTimeoutDuration: Math.max(1, Number(form.escalationTimeoutDuration || 10)),
+      escalationResetMinutes: Math.max(0, Number(form.escalationResetMinutes || 0)),
     };
   }
 
@@ -500,6 +658,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       "exemptRoleIds",
       "exemptChannelIds",
       "exemptUserIds",
+      "timeoutDuration",
+      "escalationEnabled",
+      "escalationWarnThreshold",
+      "escalationAction",
+      "escalationTimeoutDuration",
+      "escalationResetMinutes",
     ].forEach((key) => {
       if (current[key] !== original[key]) {
         changed.push(key);
@@ -533,6 +697,18 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         return "exempt channels";
       case "exemptUserIds":
         return "exempt users";
+      case "timeoutDuration":
+        return "timeout duration";
+      case "escalationEnabled":
+        return "escalation";
+      case "escalationWarnThreshold":
+        return "warn threshold";
+      case "escalationAction":
+        return "escalation action";
+      case "escalationTimeoutDuration":
+        return "escalation timeout";
+      case "escalationResetMinutes":
+        return "offense reset window";
       default:
         return field;
     }
@@ -554,7 +730,31 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       areIdListsEqual(expected.staffRoleIds, actual.staffRoleIds) &&
       areIdListsEqual(expected.exemptRoleIds, actual.exemptRoleIds) &&
       areIdListsEqual(expected.exemptChannelIds, actual.exemptChannelIds) &&
-      areIdListsEqual(expected.exemptUserIds, actual.exemptUserIds)
+      areIdListsEqual(expected.exemptUserIds, actual.exemptUserIds) &&
+      Boolean(expected.antiSpamEnabled) === Boolean(actual.antiSpamEnabled) &&
+      Number(expected.antiSpamMaxMessages) === Number(actual.antiSpamMaxMessages) &&
+      Number(expected.antiSpamWindowSeconds) === Number(actual.antiSpamWindowSeconds) &&
+      Number(expected.antiSpamAlertCooldown) === Number(actual.antiSpamAlertCooldown) &&
+      Boolean(expected.antiSpamTimeoutEnabled) === Boolean(actual.antiSpamTimeoutEnabled) &&
+      Number(expected.antiSpamTimeoutDuration) === Number(actual.antiSpamTimeoutDuration) &&
+      String(expected.antiSpamLogChannelId || "").trim() === String(actual.antiSpamLogChannelId || "").trim() &&
+      areIdListsEqual(expected.antiSpamStaffRoleIds, actual.antiSpamStaffRoleIds) &&
+      Boolean(expected.antiRaidEnabled) === Boolean(actual.antiRaidEnabled) &&
+      Number(expected.antiRaidJoinThreshold) === Number(actual.antiRaidJoinThreshold) &&
+      Number(expected.antiRaidWindowSeconds) === Number(actual.antiRaidWindowSeconds) &&
+      Number(expected.antiRaidAlertCooldown) === Number(actual.antiRaidAlertCooldown) &&
+      Boolean(expected.antiRaidTimeoutEnabled) === Boolean(actual.antiRaidTimeoutEnabled) &&
+      Number(expected.antiRaidTimeoutDuration) === Number(actual.antiRaidTimeoutDuration) &&
+      String(expected.antiRaidLogChannelId || "").trim() === String(actual.antiRaidLogChannelId || "").trim() &&
+      areIdListsEqual(expected.antiRaidStaffRoleIds, actual.antiRaidStaffRoleIds) &&
+      Boolean(expected.antiNukeEnabled) === Boolean(actual.antiNukeEnabled) &&
+      Number(expected.antiNukeActionThreshold) === Number(actual.antiNukeActionThreshold) &&
+      Number(expected.antiNukeWindowSeconds) === Number(actual.antiNukeWindowSeconds) &&
+      Number(expected.antiNukeAlertCooldown) === Number(actual.antiNukeAlertCooldown) &&
+      Boolean(expected.antiNukeTimeoutEnabled) === Boolean(actual.antiNukeTimeoutEnabled) &&
+      Number(expected.antiNukeTimeoutDuration) === Number(actual.antiNukeTimeoutDuration) &&
+      String(expected.antiNukeLogChannelId || "").trim() === String(actual.antiNukeLogChannelId || "").trim() &&
+      areIdListsEqual(expected.antiNukeStaffRoleIds, actual.antiNukeStaffRoleIds)
     );
   }
 
@@ -565,6 +765,30 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       exemptRoleIds: String(form.exemptRoleIds || "").trim(),
       exemptChannelIds: String(form.exemptChannelIds || "").trim(),
       exemptUserIds: String(form.exemptUserIds || "").trim(),
+      antiSpamEnabled: Boolean(form.antiSpamEnabled),
+      antiSpamMaxMessages: Math.max(1, Number(form.antiSpamMaxMessages || 5)),
+      antiSpamWindowSeconds: Math.max(1, Number(form.antiSpamWindowSeconds || 3)),
+      antiSpamAlertCooldown: Math.max(1, Number(form.antiSpamAlertCooldown || 10)),
+      antiSpamTimeoutEnabled: Boolean(form.antiSpamTimeoutEnabled),
+      antiSpamTimeoutDuration: Math.max(5, Number(form.antiSpamTimeoutDuration || 30)),
+      antiSpamLogChannelId: String(form.antiSpamLogChannelId || "").trim(),
+      antiSpamStaffRoleIds: String(form.antiSpamStaffRoleIds || "").trim(),
+      antiRaidEnabled: Boolean(form.antiRaidEnabled),
+      antiRaidJoinThreshold: Math.max(1, Number(form.antiRaidJoinThreshold || 8)),
+      antiRaidWindowSeconds: Math.max(1, Number(form.antiRaidWindowSeconds || 12)),
+      antiRaidAlertCooldown: Math.max(1, Number(form.antiRaidAlertCooldown || 30)),
+      antiRaidTimeoutEnabled: Boolean(form.antiRaidTimeoutEnabled),
+      antiRaidTimeoutDuration: Math.max(5, Number(form.antiRaidTimeoutDuration || 30)),
+      antiRaidLogChannelId: String(form.antiRaidLogChannelId || "").trim(),
+      antiRaidStaffRoleIds: String(form.antiRaidStaffRoleIds || "").trim(),
+      antiNukeEnabled: Boolean(form.antiNukeEnabled),
+      antiNukeActionThreshold: Math.max(1, Number(form.antiNukeActionThreshold || 3)),
+      antiNukeWindowSeconds: Math.max(1, Number(form.antiNukeWindowSeconds || 15)),
+      antiNukeAlertCooldown: Math.max(1, Number(form.antiNukeAlertCooldown || 20)),
+      antiNukeTimeoutEnabled: Boolean(form.antiNukeTimeoutEnabled),
+      antiNukeTimeoutDuration: Math.max(5, Number(form.antiNukeTimeoutDuration || 30)),
+      antiNukeLogChannelId: String(form.antiNukeLogChannelId || "").trim(),
+      antiNukeStaffRoleIds: String(form.antiNukeStaffRoleIds || "").trim(),
     };
   }
 
@@ -594,6 +818,68 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     state.editingOriginalForm = null;
   }
 
+  function renderLeftSidebar({
+    guildId,
+    guildName,
+    guildIconUrl,
+    activePage,
+    sidebarId,
+    activeRuleEditor,
+    showRuleEditorLink,
+    ruleEditorUrl,
+  }) {
+    const sidebar = document.getElementById(sidebarId);
+    if (!sidebar) {
+      return;
+    }
+
+    const editorActiveClass = activeRuleEditor ? "sidebar-active" : "";
+
+    sidebar.innerHTML = `
+      <nav class="sidebar-nav" aria-label="Guild settings navigation">
+        <div class="nav-section">
+          <p class="nav-label">Guild</p>
+          <div class="user-profile">
+            <img class="user-pfp" src="${guildIconUrl}" alt="${escapeHtml(guildName)} icon" loading="lazy" data-fallback-image="true" />
+            <p class="user-greeting">${escapeHtml(guildName)}</p>
+          </div>
+          <ul>
+            <li>
+              <a href="/pages/dashboard.html">
+                <i class="fa-solid fa-arrow-left"></i><span>Back to Guilds</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="nav-section">
+          <span class="section-title">Protection Pages</span>
+          <ul>
+            ${SETTINGS_PAGE_DEFS.map((entry) => {
+              const activeClass = activePage === entry.key ? "sidebar-active" : "";
+              return `
+                <li>
+                  <a class="${activeClass}" href="${buildGuildDashboardUrl(guildId, entry.key)}" data-settings-page-link="${entry.key}">
+                    <i class="fa-solid ${entry.icon}"></i><span>${escapeHtml(entry.label)}</span>
+                  </a>
+                </li>
+              `;
+            }).join("")}
+            ${
+              showRuleEditorLink
+                ? `<li>
+              <a class="${editorActiveClass}" href="${ruleEditorUrl || `/pages/rule-editor.html?guild_id=${encodeURIComponent(String(guildId || "").trim())}`}">
+                <i class="fa-solid fa-pen-to-square"></i><span>Rule Editor</span>
+              </a>
+            </li>`
+                : ""
+            }
+          </ul>
+        </div>
+      </nav>
+    `;
+  }
+
   function renderContent() {
     const root = document.getElementById("guild-dashboard-root");
     if (!root) {
@@ -614,6 +900,9 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const meta = getGuildMeta(selectedGuild || {});
     const guildName = meta.guildName;
     const guildIconUrl = selectedGuild ? getGuildIconUrl(selectedGuild, defaultImage) : defaultImage;
+    const activeSettingsPage = resolveSettingsPage(window.location.search);
+    const activePageLabel =
+      SETTINGS_PAGE_DEFS.find((entry) => entry.key === activeSettingsPage)?.label || "AutoMod";
     const visibleRules = state.automodRules.slice(0, MAX_AUTOMOD_RULES);
     const hasReachedRuleLimit = state.automodRules.length >= MAX_AUTOMOD_RULES;
     const keywordTokens = parseCommaSeparated(state.automodForm.keyword);
@@ -630,6 +919,17 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const isEditLimitExceeded = editKeywordTokens.length > MAX_WORDS || editRegexTokens.length > MAX_REGEXES;
     const editHasChanges = hasEditChanges(state);
     const changedFields = getChangedEditFields(state);
+
+    renderLeftSidebar({
+      guildId,
+      guildName,
+      guildIconUrl,
+      activePage: activeSettingsPage,
+      sidebarId: "guild-dashboard-sidebar",
+      activeRuleEditor: false,
+      showRuleEditorLink: false,
+      ruleEditorUrl: "",
+    });
 
     const rulesHtml =
       visibleRules.length === 0
@@ -703,6 +1003,14 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                           </select>
                         </label>
 
+                        ${state.editingRuleForm.action === "timeout" ? `
+                        <label class="automod-rule-label">
+                          Timeout Duration (minutes)
+                          <input name="timeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.timeoutDuration || 10))}" data-edit-input />
+                          <span class="field-hint">How long the user will be timed out when this rule triggers.</span>
+                        </label>
+                        ` : ""}
+
                         <label class="automod-rule-label">
                           Severity
                           <select name="severity" data-edit-input>
@@ -719,6 +1027,39 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
                             state.editingRuleForm.threshold
                           )}" data-edit-input />
                         </label>
+
+                        <label class="automod-enabled-label">
+                          <input type="checkbox" name="escalationEnabled" ${state.editingRuleForm.escalationEnabled ? "checked" : ""} data-edit-input />
+                          Enable offense escalation
+                        </label>
+
+                        ${state.editingRuleForm.escalationEnabled ? `
+                        <label class="automod-rule-label">
+                          Warn Threshold
+                          <input name="escalationWarnThreshold" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationWarnThreshold || 1))}" data-edit-input />
+                          <span class="field-hint">Warnings before escalating to the action below.</span>
+                        </label>
+                        <label class="automod-rule-label">
+                          Escalation Action
+                          <select name="escalationAction" data-edit-input>
+                            ${ESCALATION_ACTION_OPTIONS.map(
+                              (action) =>
+                                `<option value="${escapeHtml(action)}" ${state.editingRuleForm.escalationAction === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                            ).join("")}
+                          </select>
+                        </label>
+                        ${state.editingRuleForm.escalationAction === "timeout" ? `
+                        <label class="automod-rule-label">
+                          Escalation Timeout Duration (minutes)
+                          <input name="escalationTimeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationTimeoutDuration || 10))}" data-edit-input />
+                        </label>
+                        ` : ""}
+                        <label class="automod-rule-label">
+                          Offense Reset Window (minutes)
+                          <input name="escalationResetMinutes" type="number" min="0" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationResetMinutes ?? 0))}" data-edit-input />
+                          <span class="field-hint">Set to 0 to never reset.</span>
+                        </label>
+                        ` : ""}
 
                         <label class="automod-enabled-label">
                           <input type="checkbox" name="enabled" ${state.editingRuleForm.enabled ? "checked" : ""} data-edit-input />
@@ -765,14 +1106,572 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           </div>
         `;
 
-    root.innerHTML = `
-      <div class="guild-page-header">
-        <button class="action-btn secondary" type="button" id="back-to-guilds">
-          <i class="fa-solid fa-arrow-left"></i>
-          Back to Guilds
-        </button>
-      </div>
+    const isAutomodPage = activeSettingsPage === "automod";
+    const isAntiSpamPage = activeSettingsPage === "antispam";
+    const isAntiRaidPage = activeSettingsPage === "antiraid";
+    const isAntiNukePage = activeSettingsPage === "antinuke";
 
+    const settingsFieldsHtml = `
+      ${
+        isAutomodPage
+          ? `
+            <h4 class="automod-rules-title">Global AutoMod Settings</h4>
+
+            <label class="automod-rule-label">
+              AutoMod Log Channel ID
+              <input name="logChannelId" value="${escapeHtml(state.automodSettingsForm.logChannelId)}" placeholder="123456789012345678" />
+            </label>
+
+            <label class="automod-rule-label">
+              Staff Ping Role IDs (max 5, comma-separated)
+              <input name="staffRoleIds" value="${escapeHtml(state.automodSettingsForm.staffRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
+              <span class="token-counter">${parseCommaSeparated(state.automodSettingsForm.staffRoleIds).length} / ${MAX_STAFF_PING_ROLES} roles</span>
+            </label>
+
+            <label class="automod-rule-label">
+              Exempt Role IDs (comma-separated)
+              <input name="exemptRoleIds" value="${escapeHtml(state.automodSettingsForm.exemptRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
+            </label>
+
+            <label class="automod-rule-label">
+              Exempt Channel IDs (comma-separated)
+              <input name="exemptChannelIds" value="${escapeHtml(state.automodSettingsForm.exemptChannelIds)}" placeholder="333333333333333333, 444444444444444444" />
+            </label>
+
+            <label class="automod-rule-label">
+              Exempt User IDs (comma-separated)
+              <input name="exemptUserIds" value="${escapeHtml(state.automodSettingsForm.exemptUserIds)}" placeholder="555555555555555555, 666666666666666666" />
+            </label>
+          `
+          : ""
+      }
+
+      ${
+        isAntiSpamPage
+          ? `
+            <h4 class="automod-rules-title">Anti Spam Settings</h4>
+
+            <div class="settings-hero-card">
+              <div class="settings-hero-copy">
+                <span class="settings-kicker">Protection Status</span>
+                <strong>Anti Spam protection</strong>
+                <p>Detect repeated message bursts, slow down alerts, and optionally auto-timeout the sender.</p>
+              </div>
+
+              <label class="automod-enabled-label settings-toggle-card">
+                <input type="checkbox" name="antiSpamEnabled" ${state.automodSettingsForm.antiSpamEnabled ? "checked" : ""} />
+                <span>Enable Anti Spam</span>
+              </label>
+            </div>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Detection</h5>
+                <p>Choose how aggressive the spam detector should be.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Max Messages
+                  <input name="antiSpamMaxMessages" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiSpamMaxMessages)}" />
+                </label>
+
+                <label class="automod-rule-label">
+                  Window Seconds
+                  <input name="antiSpamWindowSeconds" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiSpamWindowSeconds)}" />
+                </label>
+              </div>
+            </section>
+        //Merge conflict
+        //   <label class="automod-rule-label">
+        //     Exempt User IDs (comma-separated)
+        //     <input name="exemptUserIds" value="${escapeHtml(state.automodSettingsForm.exemptUserIds)}" placeholder="555555555555555555, 666666666666666666" />
+        //   </label>
+        // </section>
+        //
+        // <!-- LHS (AI Moderation) Settings Section -->
+        // <section class="lhs-settings-section content-section" id="lhs-settings-section">
+        //   <div class="lhs-header" id="lhs-header-toggle">
+        //     <h4 class="automod-rules-title">
+        //       <i class="fa-solid fa-robot"></i>
+        //       AI Moderation (LHS)
+        //       <span class="lhs-status-badge ${state.lhsSettings.enabled ? 'enabled' : 'disabled'}">
+        //         ${state.lhsSettings.enabled ? 'Enabled' : 'Disabled'}
+        //       </span>
+        //     </h4>
+        //     <button type="button" class="action-btn secondary" id="lhs-toggle-expand">
+        //       ${state.lhsExpanded ? 'Collapse' : 'Expand'}
+        //     </button>
+        //   </div>
+        //
+        //   ${state.lhsExpanded ? `
+        //   <div class="lhs-content">
+        //     <p class="field-hint lhs-description">
+        //       LHS (Language Harm Scanner) uses AI to detect harmful content across 11 categories. 
+        //       By default, this feature is disabled and must be explicitly enabled.
+        //     </p>
+        //
+        //     ${state.isLoadingLHS ? '<p class="subtitle">Loading AI moderation settings...</p>' : ''}
+        //
+        //     <div class="lhs-form" id="lhs-form">
+        //       <!-- Master Enable Toggle -->
+        //       <label class="automod-enabled-label lhs-master-toggle">
+        //         <input type="checkbox" name="lhsEnabled" ${state.lhsSettings.enabled ? "checked" : ""} />
+        //         <strong>Enable AI Moderation</strong>
+        //         <span class="field-hint">When enabled, messages will be analyzed by the AI model</span>
+        //       </label>
+        //
+        //       <!-- Global Threshold -->
+        //       <label class="automod-rule-label">
+        //         Global Threshold
+        //         <input 
+        //           type="range" 
+        //           name="lhsGlobalThreshold" 
+        //           min="0" 
+        //           max="1" 
+        //           step="0.01" 
+        //           value="${state.lhsSettings.global_threshold}" 
+        //         />
+        //         <span class="threshold-value">${(state.lhsSettings.global_threshold * 100).toFixed(0)}%</span>
+        //         <span class="field-hint">Default: 55%. Lower values = more strict, higher values = more lenient</span>
+        //       </label>
+        //
+        //       <!-- Action Settings -->
+        //       <div class="lhs-action-settings">
+        //         <label class="automod-rule-label">
+        //           Default Action
+        //           <select name="lhsAction">
+        //             ${RULE_ACTION_OPTIONS.map(
+        //               (action) =>
+        //                 `<option value="${escapeHtml(action)}" ${state.lhsSettings.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+        //             ).join("")}
+        //           </select>
+        //         </label>
+        //
+        //         <label class="automod-rule-label">
+        //           Severity Level
+        //           <select name="lhsSeverity">
+        //             ${RULE_SEVERITY_OPTIONS.map(
+        //               (option) =>
+        //                 `<option value="${option.value}" ${Number(state.lhsSettings.severity || 2) === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`
+        //             ).join("")}
+        //           </select>
+        //           <span class="field-hint">Low severity only logs violations without taking action</span>
+        //         </label>
+        //
+        //         <label class="automod-enabled-label">
+        //           <input type="checkbox" name="lhsLogOnlyMode" ${state.lhsSettings.logOnlyMode ? "checked" : ""} />
+        //           Log Only Mode (no actions taken)
+        //         </label>
+        //       </div>
+        //
+        //       <!-- Exemptions -->
+        //       <div class="lhs-exemptions">
+        //         <h5>Exemptions</h5>
+        //
+        //         <label class="automod-rule-label">
+        //           Exempt Role IDs (comma-separated)
+        //           <input name="lhsExemptRoleIds" value="${escapeHtml(state.lhsSettings.exemptRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
+        //         </label>
+        //
+        //         <label class="automod-rule-label">
+        //           Exempt Channel IDs (comma-separated)
+        //           <input name="lhsExemptChannelIds" value="${escapeHtml(state.lhsSettings.exemptChannelIds)}" placeholder="333333333333333333, 444444444444444444" />
+        //         </label>
+        //
+        //         <label class="automod-rule-label">
+        //           Exempt User IDs (comma-separated)
+        //           <input name="lhsExemptUserIds" value="${escapeHtml(state.lhsSettings.exemptUserIds)}" placeholder="555555555555555555, 666666666666666666" />
+        //         </label>
+        //       </div>
+        //
+        //       <!-- Category Toggles -->
+        //       <div class="lhs-categories">
+        //         <h5>Detection Categories</h5>
+        //         <p class="field-hint">Enable/disable individual detection categories and set per-category thresholds</p>
+        //
+        //         <div class="lhs-category-grid">
+        //           ${LHS_CATEGORIES.map((cat) => {
+        //             const catSettings = state.lhsSettings.categories[cat.id] || { enabled: true, threshold: state.lhsSettings.global_threshold };
+        //             return `
+        //               <div class="lhs-category-item">
+        //                 <label class="lhs-category-toggle">
+        //                   <input type="checkbox" name="lhsCat_${cat.id}" ${catSettings.enabled !== false ? "checked" : ""} />
+        //                   <span class="lhs-category-name">${escapeHtml(cat.name)}</span>
+        //                 </label>
+        //                 <label class="lhs-category-threshold">
+        //                   <input 
+        //                     type="range" 
+        //                     name="lhsCatThreshold_${cat.id}" 
+        //                     min="0" 
+        //                     max="1" 
+        //                     step="0.01" 
+        //                     value="${catSettings.threshold || state.lhsSettings.global_threshold}" 
+        //                     ${catSettings.enabled === false ? "disabled" : ""}
+        //                   />
+        //                   <span class="threshold-value">${((catSettings.threshold || state.lhsSettings.global_threshold) * 100).toFixed(0)}%</span>
+        //                 </label>
+        //                 <span class="field-hint">${escapeHtml(cat.description)}</span>
+        //               </div>
+        //             `;
+        //           }).join("")}
+        //         </div>
+        //       </div>
+        //
+        //       <!-- Save Button -->
+        //       <div class="lhs-actions">
+        //         <button type="button" class="action-btn" id="lhs-save-btn" ${state.isSavingLHS ? "disabled" : ""}>
+        //           ${state.isSavingLHS ? "Saving..." : "Save AI Moderation Settings"}
+        //         </button>
+        //         ${state.lhsSettingsOriginal ? `
+        //           <button type="button" class="action-btn secondary" id="lhs-reset-btn">
+        //             Reset Changes
+        //           </button>
+        //         ` : ""}
+        //       </div>
+        //
+        //       ${isDevMode ? `
+        //       <!-- Dev Mode Preview -->
+        //       <div class="dev-mode-preview">
+        //         <h5><i class="fa-solid fa-code"></i> Dev Mode: Settings Preview</h5>
+        //         <pre class="preview-content">${escapeHtml(JSON.stringify({
+        //           enabled: state.lhsSettings.enabled,
+        //           global_threshold: state.lhsSettings.global_threshold,
+        //           action: state.lhsSettings.action,
+        //           severity: state.lhsSettings.severity,
+        //           log_only_mode: state.lhsSettings.logOnlyMode,
+        //           categories: state.lhsSettings.categories,
+        //         }, null, 2))}</pre>
+        //       </div>
+        //       ` : ''}
+        //     </div>
+        //   </div>
+        //   ` : ''}
+        // </section>
+        //
+        // <!-- Image Moderation Settings Section -->
+        // <section class="lhs-settings-section content-section image-mod-section" id="image-mod-section">
+        //   <div class="lhs-header" id="image-mod-header-toggle">
+        //     <h4 class="automod-rules-title">
+        //       <i class="fa-solid fa-image"></i>
+        //       AI Image Moderation
+        //       <span class="lhs-status-badge ${state.imageModSettings.enabled ? 'enabled' : 'disabled'}">
+        //         ${state.imageModSettings.enabled ? 'Enabled' : 'Disabled'}
+        //       </span>
+        //     </h4>
+        //     <button type="button" class="action-btn secondary" id="image-mod-toggle-expand">
+        //       ${state.imageModExpanded ? 'Collapse' : 'Expand'}
+        //     </button>
+        //   </div>
+        //
+        //   ${state.imageModExpanded ? `
+        //   <div class="lhs-content">
+        //     <p class="field-hint lhs-description">
+        //       AI Image Moderation scans images, GIFs, and videos for NSFW content using machine learning classification.
+        //       By default, this feature is disabled and must be explicitly enabled.
+        //     </p>
+        //
+        //     ${state.isLoadingImageMod ? '<p class="subtitle">Loading image moderation settings...</p>' : ''}
+        //
+        //     <div class="lhs-form" id="image-mod-form">
+        //       <!-- Master Enable Toggle -->
+        //       <label class="automod-enabled-label lhs-master-toggle">
+        //         <input type="checkbox" name="imgModEnabled" ${state.imageModSettings.enabled ? "checked" : ""} />
+        //         <strong>Enable AI Image Moderation</strong>
+        //         <span class="field-hint">When enabled, images and videos will be scanned by the AI model</span>
+        //       </label>
+        //
+        //       <!-- Scan Settings -->
+        //       <div class="lhs-action-settings">
+        //         <label class="automod-enabled-label">
+        //           <input type="checkbox" name="imgModScanAttachments" ${state.imageModSettings.scan_attachments ? "checked" : ""} />
+        //           Scan Attachments
+        //         </label>
+        //         <label class="automod-enabled-label">
+        //           <input type="checkbox" name="imgModScanEmbeds" ${state.imageModSettings.scan_embeds ? "checked" : ""} />
+        //           Scan Embeds (Tenor, Imgur, etc.)
+        //         </label>
+        //         <label class="automod-enabled-label">
+        //           <input type="checkbox" name="imgModLogOnly" ${state.imageModSettings.log_only_mode ? "checked" : ""} />
+        //           Log Only Mode (no actions taken)
+        //         </label>
+        //       </div>
+        //
+        //       <!-- Detection Filters -->
+        //       <div class="lhs-categories">
+        //         <h5>Detection Filters</h5>
+        //         <p class="field-hint">Enable filters, set threshold (lower = more strict), and choose action per filter.</p>
+        //
+        //         <div class="lhs-category-grid">
+        //           ${IMAGE_MOD_FILTERS.map((filter) => {
+        //             const filterSettings = state.imageModSettings.filters[filter.id] || { enabled: false, threshold: filter.defaultThreshold, action: "delete" };
+        //             const isCsam = filter.id === 'csam_check';
+        //             return `
+        //               <div class="lhs-category-item ${isCsam ? 'critical' : ''}">
+        //                 <label class="lhs-category-toggle">
+        //                   <input type="checkbox" name="imgModFilter_${filter.id}" ${filterSettings.enabled ? "checked" : ""} />
+        //                   <span class="lhs-category-name ${isCsam ? 'critical-label' : ''}">
+        //                     ${isCsam ? '<i class="fa-solid fa-shield-halved"></i> ' : ''}${escapeHtml(filter.name)}
+        //                   </span>
+        //                 </label>
+        //                 <label class="lhs-category-threshold">
+        //                   <input 
+        //                     type="range" 
+        //                     name="imgModThreshold_${filter.id}" 
+        //                     min="0" 
+        //                     max="1" 
+        //                     step="0.01" 
+        //                     value="${filterSettings.threshold}" 
+        //                     ${!filterSettings.enabled ? 'disabled' : ''}
+        //                   />
+        //                   <span class="threshold-value">${(filterSettings.threshold * 100).toFixed(0)}%</span>
+        //                 </label>
+        //                 <label class="automod-rule-label" style="margin-top: 0.5rem;">
+        //                   <select name="imgModAction_${filter.id}" ${!filterSettings.enabled ? 'disabled' : ''}>
+        //                     ${IMAGE_MOD_ACTIONS.map(
+        //                       (action) =>
+        //                         `<option value="${escapeHtml(action)}" ${filterSettings.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+        //                     ).join("")}
+        //                   </select>
+        //                 </label>
+        //                 <span class="field-hint">${escapeHtml(filter.description)}</span>
+        //               </div>
+        //             `;
+        //           }).join("")}
+        //         </div>
+        //       </div>
+        //
+        //       <!-- Save Button -->
+        //       <div class="lhs-actions">
+        //         <button type="button" class="action-btn" id="image-mod-save-btn" ${state.isSavingImageMod ? "disabled" : ""}>
+        //           ${state.isSavingImageMod ? "Saving..." : "Save Image Moderation Settings"}
+        //         </button>
+        //         ${state.imageModSettingsOriginal ? `
+        //           <button type="button" class="action-btn secondary" id="image-mod-reset-btn">
+        //             Reset Changes
+        //           </button>
+        //         ` : ""}
+        //       </div>
+        //
+        //       ${isDevMode ? `
+        //       <!-- Dev Mode Preview -->
+        //       <div class="dev-mode-preview">
+        //         <h5><i class="fa-solid fa-code"></i> Dev Mode: Settings Preview</h5>
+        //         <pre class="preview-content">${escapeHtml(JSON.stringify(state.imageModSettings, null, 2))}</pre>
+        //       </div>
+        //       ` : ''}
+        //     </div>
+        //   </div>
+        //   ` : ''}
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Enforcement</h5>
+                <p>Control alert throttling and whether offenders get timed out automatically.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Alert Cooldown (seconds)
+                  <input name="antiSpamAlertCooldown" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiSpamAlertCooldown)}" />
+                </label>
+
+                <label class="automod-enabled-label settings-inline-toggle">
+                  <input type="checkbox" name="antiSpamTimeoutEnabled" ${state.automodSettingsForm.antiSpamTimeoutEnabled ? "checked" : ""} />
+                  <span>Timeout Enabled</span>
+                </label>
+
+                <label class="automod-rule-label settings-subgroup-wide">
+                  Timeout Duration (seconds)
+                  <input name="antiSpamTimeoutDuration" type="number" min="5" step="1" value="${escapeHtml(state.automodSettingsForm.antiSpamTimeoutDuration)}" />
+                </label>
+              </div>
+            </section>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Alert Routing</h5>
+                <p>Pick where alerts go and which staff roles get pinged.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Log Channel ID
+                  <input name="antiSpamLogChannelId" value="${escapeHtml(state.automodSettingsForm.antiSpamLogChannelId)}" placeholder="123456789012345678" />
+                </label>
+
+                <label class="automod-rule-label">
+                  Staff Ping Role IDs (max 5, comma-separated)
+                  <input name="antiSpamStaffRoleIds" value="${escapeHtml(state.automodSettingsForm.antiSpamStaffRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
+                  <span class="token-counter">${parseCommaSeparated(state.automodSettingsForm.antiSpamStaffRoleIds).length} / ${MAX_STAFF_PING_ROLES} roles</span>
+                </label>
+              </div>
+            </section>
+          `
+          : ""
+      }
+
+      ${
+        isAntiRaidPage
+          ? `
+            <h4 class="automod-rules-title">Anti Raid Settings</h4>
+
+            <div class="settings-hero-card">
+              <div class="settings-hero-copy">
+                <span class="settings-kicker">Protection Status</span>
+                <strong>Anti Raid protection</strong>
+                <p>Track suspicious join bursts, avoid noisy repeats, and escalate automatically when needed.</p>
+              </div>
+
+              <label class="automod-enabled-label settings-toggle-card">
+                <input type="checkbox" name="antiRaidEnabled" ${state.automodSettingsForm.antiRaidEnabled ? "checked" : ""} />
+                <span>Enable Anti Raid</span>
+              </label>
+            </div>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Detection</h5>
+                <p>Define what counts as a raid wave.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Join Threshold
+                  <input name="antiRaidJoinThreshold" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiRaidJoinThreshold)}" />
+                </label>
+
+                <label class="automod-rule-label">
+                  Window Seconds
+                  <input name="antiRaidWindowSeconds" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiRaidWindowSeconds)}" />
+                </label>
+              </div>
+            </section>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Enforcement</h5>
+                <p>Control how often staff gets alerted and whether incoming raiders are timed out.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Alert Cooldown (seconds)
+                  <input name="antiRaidAlertCooldown" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiRaidAlertCooldown)}" />
+                </label>
+
+                <label class="automod-enabled-label settings-inline-toggle">
+                  <input type="checkbox" name="antiRaidTimeoutEnabled" ${state.automodSettingsForm.antiRaidTimeoutEnabled ? "checked" : ""} />
+                  <span>Timeout Enabled</span>
+                </label>
+
+                <label class="automod-rule-label settings-subgroup-wide">
+                  Timeout Duration (seconds)
+                  <input name="antiRaidTimeoutDuration" type="number" min="5" step="1" value="${escapeHtml(state.automodSettingsForm.antiRaidTimeoutDuration)}" />
+                </label>
+              </div>
+            </section>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Alert Routing</h5>
+                <p>Set a log channel and the roles that should be mentioned during a raid alert.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Log Channel ID
+                  <input name="antiRaidLogChannelId" value="${escapeHtml(state.automodSettingsForm.antiRaidLogChannelId)}" placeholder="123456789012345678" />
+                </label>
+
+                <label class="automod-rule-label">
+                  Staff Ping Role IDs (max 5, comma-separated)
+                  <input name="antiRaidStaffRoleIds" value="${escapeHtml(state.automodSettingsForm.antiRaidStaffRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
+                  <span class="token-counter">${parseCommaSeparated(state.automodSettingsForm.antiRaidStaffRoleIds).length} / ${MAX_STAFF_PING_ROLES} roles</span>
+                </label>
+              </div>
+            </section>
+          `
+          : ""
+      }
+
+      ${
+        isAntiNukePage
+          ? `
+            <h4 class="automod-rules-title">Anti Nuke Settings</h4>
+
+            <div class="settings-hero-card">
+              <div class="settings-hero-copy">
+                <span class="settings-kicker">Protection Status</span>
+                <strong>Anti Nuke protection</strong>
+                <p>Detect destructive moderation bursts, rate-limit staff alerts, and optionally time out the actor.</p>
+              </div>
+
+              <label class="automod-enabled-label settings-toggle-card">
+                <input type="checkbox" name="antiNukeEnabled" ${state.automodSettingsForm.antiNukeEnabled ? "checked" : ""} />
+                <span>Enable Anti Nuke</span>
+              </label>
+            </div>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Detection</h5>
+                <p>Set how many destructive actions within a short period should trigger protection.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Action Threshold
+                  <input name="antiNukeActionThreshold" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiNukeActionThreshold)}" />
+                </label>
+
+                <label class="automod-rule-label">
+                  Window Seconds
+                  <input name="antiNukeWindowSeconds" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiNukeWindowSeconds)}" />
+                </label>
+              </div>
+            </section>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Enforcement</h5>
+                <p>Throttle repeated alerts and decide whether the triggered user is timed out automatically.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Alert Cooldown (seconds)
+                  <input name="antiNukeAlertCooldown" type="number" min="1" step="1" value="${escapeHtml(state.automodSettingsForm.antiNukeAlertCooldown)}" />
+                </label>
+
+                <label class="automod-enabled-label settings-inline-toggle">
+                  <input type="checkbox" name="antiNukeTimeoutEnabled" ${state.automodSettingsForm.antiNukeTimeoutEnabled ? "checked" : ""} />
+                  <span>Timeout Enabled</span>
+                </label>
+
+                <label class="automod-rule-label settings-subgroup-wide">
+                  Timeout Duration (seconds)
+                  <input name="antiNukeTimeoutDuration" type="number" min="5" step="1" value="${escapeHtml(state.automodSettingsForm.antiNukeTimeoutDuration)}" />
+                </label>
+              </div>
+            </section>
+
+            <section class="settings-subgroup">
+              <div class="settings-subgroup-header">
+                <h5>Alert Routing</h5>
+                <p>Set where anti-nuke alerts land and who gets pinged when protection triggers.</p>
+              </div>
+              <div class="settings-subgroup-grid">
+                <label class="automod-rule-label">
+                  Log Channel ID
+                  <input name="antiNukeLogChannelId" value="${escapeHtml(state.automodSettingsForm.antiNukeLogChannelId)}" placeholder="123456789012345678" />
+                </label>
+
+                <label class="automod-rule-label">
+                  Staff Ping Role IDs (max 5, comma-separated)
+                  <input name="antiNukeStaffRoleIds" value="${escapeHtml(state.automodSettingsForm.antiNukeStaffRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
+                  <span class="token-counter">${parseCommaSeparated(state.automodSettingsForm.antiNukeStaffRoleIds).length} / ${MAX_STAFF_PING_ROLES} roles</span>
+                </label>
+              </div>
+            </section>
+          `
+          : ""
+      }
+    `;
+
+    root.innerHTML = `
       <section class="dashboard-card guild-summary-card">
         <img class="guild-icon-image" src="${guildIconUrl}" alt="${escapeHtml(guildName)} icon" loading="lazy" data-fallback-image="true" />
         <h3>${escapeHtml(guildName)}</h3>
@@ -780,387 +1679,176 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       </section>
 
       <section class="content-section">
-        <h3>AutoMod Setup</h3>
+        <h3>${escapeHtml(activePageLabel)} Page</h3>
 
         <section class="automod-settings-form" id="automod-settings-form">
-          <h4 class="automod-rules-title">Global AutoMod Settings</h4>
+          ${settingsFieldsHtml}
 
-          <label class="automod-rule-label">
-            AutoMod Log Channel ID
-            <input name="logChannelId" value="${escapeHtml(state.automodSettingsForm.logChannelId)}" placeholder="123456789012345678" />
-          </label>
-
-          <label class="automod-rule-label">
-            Staff Ping Role IDs (max 5, comma-separated)
-            <input name="staffRoleIds" value="${escapeHtml(state.automodSettingsForm.staffRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
-            <span class="token-counter">${parseCommaSeparated(state.automodSettingsForm.staffRoleIds).length} / ${MAX_STAFF_PING_ROLES} roles</span>
-          </label>
-
-          <label class="automod-rule-label">
-            Exempt Role IDs (comma-separated)
-            <input name="exemptRoleIds" value="${escapeHtml(state.automodSettingsForm.exemptRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
-          </label>
-
-          <label class="automod-rule-label">
-            Exempt Channel IDs (comma-separated)
-            <input name="exemptChannelIds" value="${escapeHtml(state.automodSettingsForm.exemptChannelIds)}" placeholder="333333333333333333, 444444444444444444" />
-          </label>
-
-          <label class="automod-rule-label">
-            Exempt User IDs (comma-separated)
-            <input name="exemptUserIds" value="${escapeHtml(state.automodSettingsForm.exemptUserIds)}" placeholder="555555555555555555, 666666666666666666" />
-          </label>
+          ${
+            isAutomodPage
+              ? ""
+              : `<button class="action-btn" type="button" id="save-page-settings" ${state.isSavingSettings ? "disabled" : ""}>${
+                  state.isSavingSettings ? "Saving..." : "Save Settings"
+                }</button>`
+          }
         </section>
 
-        <!-- LHS (AI Moderation) Settings Section -->
-        <section class="lhs-settings-section content-section" id="lhs-settings-section">
-          <div class="lhs-header" id="lhs-header-toggle">
-            <h4 class="automod-rules-title">
-              <i class="fa-solid fa-robot"></i>
-              AI Moderation (LHS)
-              <span class="lhs-status-badge ${state.lhsSettings.enabled ? 'enabled' : 'disabled'}">
-                ${state.lhsSettings.enabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </h4>
-            <button type="button" class="action-btn secondary" id="lhs-toggle-expand">
-              ${state.lhsExpanded ? 'Collapse' : 'Expand'}
-            </button>
-          </div>
-          
-          ${state.lhsExpanded ? `
-          <div class="lhs-content">
-            <p class="field-hint lhs-description">
-              LHS (Language Harm Scanner) uses AI to detect harmful content across 11 categories. 
-              By default, this feature is disabled and must be explicitly enabled.
-            </p>
-
-            ${state.isLoadingLHS ? '<p class="subtitle">Loading AI moderation settings...</p>' : ''}
-            
-            <div class="lhs-form" id="lhs-form">
-              <!-- Master Enable Toggle -->
-              <label class="automod-enabled-label lhs-master-toggle">
-                <input type="checkbox" name="lhsEnabled" ${state.lhsSettings.enabled ? "checked" : ""} />
-                <strong>Enable AI Moderation</strong>
-                <span class="field-hint">When enabled, messages will be analyzed by the AI model</span>
-              </label>
-
-              <!-- Global Threshold -->
-              <label class="automod-rule-label">
-                Global Threshold
-                <input 
-                  type="range" 
-                  name="lhsGlobalThreshold" 
-                  min="0" 
-                  max="1" 
-                  step="0.01" 
-                  value="${state.lhsSettings.global_threshold}" 
-                />
-                <span class="threshold-value">${(state.lhsSettings.global_threshold * 100).toFixed(0)}%</span>
-                <span class="field-hint">Default: 55%. Lower values = more strict, higher values = more lenient</span>
-              </label>
-
-              <!-- Action Settings -->
-              <div class="lhs-action-settings">
-                <label class="automod-rule-label">
-                  Default Action
-                  <select name="lhsAction">
-                    ${RULE_ACTION_OPTIONS.map(
-                      (action) =>
-                        `<option value="${escapeHtml(action)}" ${state.lhsSettings.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
-                    ).join("")}
-                  </select>
-                </label>
-
-                <label class="automod-rule-label">
-                  Severity Level
-                  <select name="lhsSeverity">
-                    ${RULE_SEVERITY_OPTIONS.map(
-                      (option) =>
-                        `<option value="${option.value}" ${Number(state.lhsSettings.severity || 2) === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`
-                    ).join("")}
-                  </select>
-                  <span class="field-hint">Low severity only logs violations without taking action</span>
-                </label>
-
-                <label class="automod-enabled-label">
-                  <input type="checkbox" name="lhsLogOnlyMode" ${state.lhsSettings.logOnlyMode ? "checked" : ""} />
-                  Log Only Mode (no actions taken)
-                </label>
-              </div>
-
-              <!-- Exemptions -->
-              <div class="lhs-exemptions">
-                <h5>Exemptions</h5>
-                
-                <label class="automod-rule-label">
-                  Exempt Role IDs (comma-separated)
-                  <input name="lhsExemptRoleIds" value="${escapeHtml(state.lhsSettings.exemptRoleIds)}" placeholder="111111111111111111, 222222222222222222" />
-                </label>
-
-                <label class="automod-rule-label">
-                  Exempt Channel IDs (comma-separated)
-                  <input name="lhsExemptChannelIds" value="${escapeHtml(state.lhsSettings.exemptChannelIds)}" placeholder="333333333333333333, 444444444444444444" />
-                </label>
-
-                <label class="automod-rule-label">
-                  Exempt User IDs (comma-separated)
-                  <input name="lhsExemptUserIds" value="${escapeHtml(state.lhsSettings.exemptUserIds)}" placeholder="555555555555555555, 666666666666666666" />
-                </label>
-              </div>
-
-              <!-- Category Toggles -->
-              <div class="lhs-categories">
-                <h5>Detection Categories</h5>
-                <p class="field-hint">Enable/disable individual detection categories and set per-category thresholds</p>
-                
-                <div class="lhs-category-grid">
-                  ${LHS_CATEGORIES.map((cat) => {
-                    const catSettings = state.lhsSettings.categories[cat.id] || { enabled: true, threshold: state.lhsSettings.global_threshold };
-                    return `
-                      <div class="lhs-category-item">
-                        <label class="lhs-category-toggle">
-                          <input type="checkbox" name="lhsCat_${cat.id}" ${catSettings.enabled !== false ? "checked" : ""} />
-                          <span class="lhs-category-name">${escapeHtml(cat.name)}</span>
-                        </label>
-                        <label class="lhs-category-threshold">
-                          <input 
-                            type="range" 
-                            name="lhsCatThreshold_${cat.id}" 
-                            min="0" 
-                            max="1" 
-                            step="0.01" 
-                            value="${catSettings.threshold || state.lhsSettings.global_threshold}" 
-                            ${catSettings.enabled === false ? "disabled" : ""}
-                          />
-                          <span class="threshold-value">${((catSettings.threshold || state.lhsSettings.global_threshold) * 100).toFixed(0)}%</span>
-                        </label>
-                        <span class="field-hint">${escapeHtml(cat.description)}</span>
-                      </div>
-                    `;
-                  }).join("")}
-                </div>
-              </div>
-
-              <!-- Save Button -->
-              <div class="lhs-actions">
-                <button type="button" class="action-btn" id="lhs-save-btn" ${state.isSavingLHS ? "disabled" : ""}>
-                  ${state.isSavingLHS ? "Saving..." : "Save AI Moderation Settings"}
-                </button>
-                ${state.lhsSettingsOriginal ? `
-                  <button type="button" class="action-btn secondary" id="lhs-reset-btn">
-                    Reset Changes
-                  </button>
-                ` : ""}
-              </div>
-
-              ${isDevMode ? `
-              <!-- Dev Mode Preview -->
-              <div class="dev-mode-preview">
-                <h5><i class="fa-solid fa-code"></i> Dev Mode: Settings Preview</h5>
-                <pre class="preview-content">${escapeHtml(JSON.stringify({
-                  enabled: state.lhsSettings.enabled,
-                  global_threshold: state.lhsSettings.global_threshold,
-                  action: state.lhsSettings.action,
-                  severity: state.lhsSettings.severity,
-                  log_only_mode: state.lhsSettings.logOnlyMode,
-                  categories: state.lhsSettings.categories,
-                }, null, 2))}</pre>
-              </div>
-              ` : ''}
-            </div>
-          </div>
-          ` : ''}
-        </section>
-
-        <!-- Image Moderation Settings Section -->
-        <section class="lhs-settings-section content-section image-mod-section" id="image-mod-section">
-          <div class="lhs-header" id="image-mod-header-toggle">
-            <h4 class="automod-rules-title">
-              <i class="fa-solid fa-image"></i>
-              AI Image Moderation
-              <span class="lhs-status-badge ${state.imageModSettings.enabled ? 'enabled' : 'disabled'}">
-                ${state.imageModSettings.enabled ? 'Enabled' : 'Disabled'}
-              </span>
-            </h4>
-            <button type="button" class="action-btn secondary" id="image-mod-toggle-expand">
-              ${state.imageModExpanded ? 'Collapse' : 'Expand'}
-            </button>
-          </div>
-          
-          ${state.imageModExpanded ? `
-          <div class="lhs-content">
-            <p class="field-hint lhs-description">
-              AI Image Moderation scans images, GIFs, and videos for NSFW content using machine learning classification.
-              By default, this feature is disabled and must be explicitly enabled.
-            </p>
-
-            ${state.isLoadingImageMod ? '<p class="subtitle">Loading image moderation settings...</p>' : ''}
-            
-            <div class="lhs-form" id="image-mod-form">
-              <!-- Master Enable Toggle -->
-              <label class="automod-enabled-label lhs-master-toggle">
-                <input type="checkbox" name="imgModEnabled" ${state.imageModSettings.enabled ? "checked" : ""} />
-                <strong>Enable AI Image Moderation</strong>
-                <span class="field-hint">When enabled, images and videos will be scanned by the AI model</span>
-              </label>
-
-              <!-- Scan Settings -->
-              <div class="lhs-action-settings">
-                <label class="automod-enabled-label">
-                  <input type="checkbox" name="imgModScanAttachments" ${state.imageModSettings.scan_attachments ? "checked" : ""} />
-                  Scan Attachments
-                </label>
-                <label class="automod-enabled-label">
-                  <input type="checkbox" name="imgModScanEmbeds" ${state.imageModSettings.scan_embeds ? "checked" : ""} />
-                  Scan Embeds (Tenor, Imgur, etc.)
-                </label>
-                <label class="automod-enabled-label">
-                  <input type="checkbox" name="imgModLogOnly" ${state.imageModSettings.log_only_mode ? "checked" : ""} />
-                  Log Only Mode (no actions taken)
-                </label>
-              </div>
-
-              <!-- Detection Filters -->
-              <div class="lhs-categories">
-                <h5>Detection Filters</h5>
-                <p class="field-hint">Enable filters, set threshold (lower = more strict), and choose action per filter.</p>
-                
-                <div class="lhs-category-grid">
-                  ${IMAGE_MOD_FILTERS.map((filter) => {
-                    const filterSettings = state.imageModSettings.filters[filter.id] || { enabled: false, threshold: filter.defaultThreshold, action: "delete" };
-                    const isCsam = filter.id === 'csam_check';
-                    return `
-                      <div class="lhs-category-item ${isCsam ? 'critical' : ''}">
-                        <label class="lhs-category-toggle">
-                          <input type="checkbox" name="imgModFilter_${filter.id}" ${filterSettings.enabled ? "checked" : ""} />
-                          <span class="lhs-category-name ${isCsam ? 'critical-label' : ''}">
-                            ${isCsam ? '<i class="fa-solid fa-shield-halved"></i> ' : ''}${escapeHtml(filter.name)}
-                          </span>
-                        </label>
-                        <label class="lhs-category-threshold">
-                          <input 
-                            type="range" 
-                            name="imgModThreshold_${filter.id}" 
-                            min="0" 
-                            max="1" 
-                            step="0.01" 
-                            value="${filterSettings.threshold}" 
-                            ${!filterSettings.enabled ? 'disabled' : ''}
-                          />
-                          <span class="threshold-value">${(filterSettings.threshold * 100).toFixed(0)}%</span>
-                        </label>
-                        <label class="automod-rule-label" style="margin-top: 0.5rem;">
-                          <select name="imgModAction_${filter.id}" ${!filterSettings.enabled ? 'disabled' : ''}>
-                            ${IMAGE_MOD_ACTIONS.map(
-                              (action) =>
-                                `<option value="${escapeHtml(action)}" ${filterSettings.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
-                            ).join("")}
-                          </select>
-                        </label>
-                        <span class="field-hint">${escapeHtml(filter.description)}</span>
-                      </div>
-                    `;
-                  }).join("")}
-                </div>
-              </div>
-
-              <!-- Save Button -->
-              <div class="lhs-actions">
-                <button type="button" class="action-btn" id="image-mod-save-btn" ${state.isSavingImageMod ? "disabled" : ""}>
-                  ${state.isSavingImageMod ? "Saving..." : "Save Image Moderation Settings"}
-                </button>
-                ${state.imageModSettingsOriginal ? `
-                  <button type="button" class="action-btn secondary" id="image-mod-reset-btn">
-                    Reset Changes
-                  </button>
-                ` : ""}
-              </div>
-
-              ${isDevMode ? `
-              <!-- Dev Mode Preview -->
-              <div class="dev-mode-preview">
-                <h5><i class="fa-solid fa-code"></i> Dev Mode: Settings Preview</h5>
-                <pre class="preview-content">${escapeHtml(JSON.stringify(state.imageModSettings, null, 2))}</pre>
-              </div>
-              ` : ''}
-            </div>
-          </div>
-          ` : ''}
-        </section>
-
+        ${
+          isAutomodPage
+            ? `
         <form class="automod-form" id="automod-create-form">
-          <label class="automod-rule-label">
-            Rule Name
-            <input name="name" value="${escapeHtml(state.automodForm.name)}" list="automod-rule-name-presets" required />
-          </label>
-
-          <label class="automod-rule-label automod-preset-control">
-            Presets
-            <div class="preset-toggle-list" role="group" aria-label="Create presets">
-              ${RULE_NAME_PRESETS.map(
-                (name) =>
-                  `<button class="preset-toggle-btn ${createSelectedPresets.includes(name) ? "is-active" : ""}" type="button" data-preset-toggle data-preset-context="create" data-preset-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`
-              ).join("")}
+          <div class="settings-hero-card rule-builder-hero">
+            <div class="settings-hero-copy">
+              <span class="settings-kicker">Rule Builder</span>
+              <strong>Create an AutoMod rule</strong>
+              <p>Start from a preset or build your own rule with keywords, regex filters, and response settings.</p>
             </div>
-            <span class="field-hint">Click presets to toggle them on or off.</span>
-          </label>
 
-          <label class="automod-rule-label">
-            Keyword
-            <input name="keyword" value="${escapeHtml(state.automodForm.keyword)}" placeholder="badword, badword2" />
-            <span class="token-counter">${keywordTokens.length} / ${MAX_WORDS} words</span>
-            ${
-              keywordTokens.length > 0
-                ? `<span class="token-chip-list">${keywordTokens.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")}</span>`
-                : ""
-            }
-          </label>
+            <label class="automod-rule-label settings-toggle-card rule-builder-name-card">
+              Rule Name
+              <input name="name" value="${escapeHtml(state.automodForm.name)}" list="automod-rule-name-presets" required />
+            </label>
+          </div>
 
-          <label class="automod-rule-label">
-            Allowed Keywords
-            <input name="allowedKeywords" value="${escapeHtml(state.automodForm.allowedKeywords)}" placeholder="example.com, trusted phrase" />
-            <span class="token-counter">${allowedKeywordTokens.length} allowed</span>
-            ${
-              allowedKeywordTokens.length > 0
-                ? `<span class="token-chip-list">${allowedKeywordTokens
-                    .map((token) => `<span class="token-chip muted">${escapeHtml(token)}</span>`)
-                    .join("")}</span>`
-                : ""
-            }
-          </label>
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Presets</h5>
+              <p>Use presets as a starting point, then refine the rule below.</p>
+            </div>
+            <label class="automod-rule-label automod-preset-control rule-builder-preset-control">
+              Preset Library
+              <div class="preset-toggle-list" role="group" aria-label="Create presets">
+                ${RULE_NAME_PRESETS.map(
+                  (name) =>
+                    `<button class="preset-toggle-btn ${createSelectedPresets.includes(name) ? "is-active" : ""}" type="button" data-preset-toggle data-preset-context="create" data-preset-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`
+                ).join("")}
+              </div>
+              <span class="field-hint">Click presets to toggle them on or off.</span>
+            </label>
+          </section>
 
-          <label class="automod-rule-label">
-            Pattern (Optional)
-            <textarea name="pattern" rows="5" placeholder="\\b(badword)\\b&#10;(https?:\\/\\/\\S+)">${escapeHtml(state.automodForm.pattern)}</textarea>
-            <span class="field-hint">Use one regex per line for clear separation.</span>
-            <span class="token-counter">${regexTokens.length} / ${MAX_REGEXES} regexes</span>
-            ${
-              regexTokens.length > 0
-                ? `<span class="token-chip-list">${regexTokens.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")}</span>`
-                : ""
-            }
-          </label>
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Matching Logic</h5>
+              <p>Define what content should trigger this rule and what should be allowed through.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-rule-label">
+                Keyword
+                <input name="keyword" value="${escapeHtml(state.automodForm.keyword)}" placeholder="badword, badword2" />
+                <span class="token-counter">${keywordTokens.length} / ${MAX_WORDS} words</span>
+                ${
+                  keywordTokens.length > 0
+                    ? `<span class="token-chip-list">${keywordTokens.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")}</span>`
+                    : ""
+                }
+              </label>
 
-          <label class="automod-rule-label">
-            Action
-            <select name="action">
-              ${RULE_ACTION_OPTIONS.map(
-                (action) =>
-                  `<option value="${escapeHtml(action)}" ${state.automodForm.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
-              ).join("")}
-            </select>
-          </label>
+              <label class="automod-rule-label">
+                Allowed Keywords
+                <input name="allowedKeywords" value="${escapeHtml(state.automodForm.allowedKeywords)}" placeholder="example.com, trusted phrase" />
+                <span class="token-counter">${allowedKeywordTokens.length} allowed</span>
+                ${
+                  allowedKeywordTokens.length > 0
+                    ? `<span class="token-chip-list">${allowedKeywordTokens
+                        .map((token) => `<span class="token-chip muted">${escapeHtml(token)}</span>`)
+                        .join("")}</span>`
+                    : ""
+                }
+              </label>
 
-          <label class="automod-rule-label">
-            Severity
-            <select name="severity">
-              ${RULE_SEVERITY_OPTIONS.map(
-                (option) =>
-                  `<option value="${option.value}" ${Number(state.automodForm.severity || 2) === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`
-              ).join("")}
-            </select>
-            <span class="field-hint">Low severity only logs to staff and will not delete the message.</span>
-          </label>
+              <label class="automod-rule-label settings-subgroup-wide">
+                Pattern (Optional)
+                <textarea name="pattern" rows="5" placeholder="\\b(badword)\\b&#10;(https?:\\/\\/\\S+)">${escapeHtml(state.automodForm.pattern)}</textarea>
+                <span class="field-hint">Use one regex per line for clear separation.</span>
+                <span class="token-counter">${regexTokens.length} / ${MAX_REGEXES} regexes</span>
+                ${
+                  regexTokens.length > 0
+                    ? `<span class="token-chip-list">${regexTokens.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")}</span>`
+                    : ""
+                }
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Response</h5>
+              <p>Choose how the bot should react when the rule matches.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-rule-label">
+                Action
+                <select name="action">
+                  ${RULE_ACTION_OPTIONS.map(
+                    (action) =>
+                      `<option value="${escapeHtml(action)}" ${state.automodForm.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                  ).join("")}
+                </select>
+              </label>
+
+              ${state.automodForm.action === "timeout" ? `
+              <label class="automod-rule-label">
+                Timeout Duration (minutes)
+                <input name="timeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.automodForm.timeoutDuration || 10))}" />
+                <span class="field-hint">How long the user will be timed out when this rule triggers.</span>
+              </label>
+              ` : ""}
+
+              <label class="automod-rule-label">
+                Severity
+                <select name="severity">
+                  ${RULE_SEVERITY_OPTIONS.map(
+                    (option) =>
+                      `<option value="${option.value}" ${Number(state.automodForm.severity || 2) === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`
+                  ).join("")}
+                </select>
+                <span class="field-hint">Low severity only logs to staff and will not delete the message.</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Offense Escalation</h5>
+              <p>Automatically escalate repeat violations through a configurable punishment ladder.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-enabled-label">
+                <input type="checkbox" name="escalationEnabled" ${state.automodForm.escalationEnabled ? "checked" : ""} />
+                Enable offense escalation
+              </label>
+              ${state.automodForm.escalationEnabled ? `
+              <label class="automod-rule-label">
+                Warn Threshold
+                <input name="escalationWarnThreshold" type="number" min="1" step="1" value="${escapeHtml(String(state.automodForm.escalationWarnThreshold || 1))}" />
+                <span class="field-hint">Number of warnings to issue before escalating. After this many offenses the escalation action fires instead.</span>
+              </label>
+              <label class="automod-rule-label">
+                Escalation Action
+                <select name="escalationAction">
+                  ${ESCALATION_ACTION_OPTIONS.map(
+                    (action) =>
+                      `<option value="${escapeHtml(action)}" ${state.automodForm.escalationAction === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                  ).join("")}
+                </select>
+                <span class="field-hint">Action taken once the warn threshold is exceeded.</span>
+              </label>
+              ${state.automodForm.escalationAction === "timeout" ? `
+              <label class="automod-rule-label">
+                Escalation Timeout Duration (minutes)
+                <input name="escalationTimeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.automodForm.escalationTimeoutDuration || 10))}" />
+                <span class="field-hint">How long the timeout lasts when a user exceeds the warn threshold.</span>
+              </label>
+              ` : ""}
+              <label class="automod-rule-label">
+                Offense Reset Window (minutes)
+                <input name="escalationResetMinutes" type="number" min="0" step="1" value="${escapeHtml(String(state.automodForm.escalationResetMinutes ?? 0))}" />
+                <span class="field-hint">Minutes of good behaviour before a user's offense count resets. Set to 0 to never reset.</span>
+              </label>
+              ` : ""}
+            </div>
+          </section>
 
           <button type="submit" ${state.isSubmittingRule || hasReachedRuleLimit || isCreateLimitExceeded ? "disabled" : ""}>
             ${state.isSubmittingRule ? "Saving..." : "Create AutoMod Rule"}
@@ -1176,15 +1864,13 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         <datalist id="automod-rule-name-presets">
           ${RULE_NAME_PRESETS.map((name) => `<option value="${escapeHtml(name)}"></option>`).join("")}
         </datalist>
+            `
+            : ""
+        }
       </section>
 
       ${state.statusMessage ? `<p class="subtitle">${escapeHtml(state.statusMessage)}</p>` : ""}
     `;
-
-    const backButton = document.getElementById("back-to-guilds");
-    if (backButton) {
-      backButton.addEventListener("click", () => navigate("/pages/dashboard.html"));
-    }
 
     root.querySelectorAll("[data-preset-toggle]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1232,7 +1918,22 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           return;
         }
 
-        state.automodSettingsForm[target.name] = target.value;
+        if (target.type === "checkbox") {
+          state.automodSettingsForm[target.name] = target.checked;
+        } else if (target.type === "number") {
+          const min = Number(target.min || 1);
+          state.automodSettingsForm[target.name] = Math.max(min, Number(target.value || min));
+        } else {
+          state.automodSettingsForm[target.name] = target.value;
+        }
+      });
+    }
+
+    const savePageSettingsButton = document.getElementById("save-page-settings");
+    if (savePageSettingsButton) {
+      savePageSettingsButton.addEventListener("click", async () => {
+        await saveSettings(guildId, state);
+        renderContent();
       });
     }
 
@@ -1245,6 +1946,12 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         state.automodForm.pattern = String(formData.get("pattern") || "");
         state.automodForm.action = String(formData.get("action") || "warn");
         state.automodForm.severity = Math.max(1, Math.min(3, Number(formData.get("severity") || 2)));
+        state.automodForm.timeoutDuration = Math.max(1, Number(formData.get("timeoutDuration") || 10));
+        state.automodForm.escalationEnabled = formData.get("escalationEnabled") === "on";
+        state.automodForm.escalationWarnThreshold = Math.max(1, Number(formData.get("escalationWarnThreshold") || 1));
+        state.automodForm.escalationAction = String(formData.get("escalationAction") || "timeout");
+        state.automodForm.escalationTimeoutDuration = Math.max(1, Number(formData.get("escalationTimeoutDuration") || 10));
+        state.automodForm.escalationResetMinutes = Math.max(0, Number(formData.get("escalationResetMinutes") || 0));
         rerenderKeepingInput(renderContent);
       });
 
@@ -1317,7 +2024,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         if (input instanceof HTMLInputElement && input.type === "checkbox") {
           state.editingRuleForm[name] = input.checked;
         } else if (input instanceof HTMLInputElement && input.type === "number") {
-          state.editingRuleForm[name] = Math.max(1, Number(input.value || 1));
+          const min = Number(input.min || 1);
+          state.editingRuleForm[name] = Math.max(min, Number(input.value || min));
         } else {
           state.editingRuleForm[name] = input.value;
         }
@@ -1592,6 +2300,30 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           exemptRoleIds: "",
           exemptChannelIds: "",
           exemptUserIds: "",
+          antiSpamEnabled: true,
+          antiSpamMaxMessages: 5,
+          antiSpamWindowSeconds: 3,
+          antiSpamAlertCooldown: 10,
+          antiSpamTimeoutEnabled: true,
+          antiSpamTimeoutDuration: 30,
+          antiSpamLogChannelId: "",
+          antiSpamStaffRoleIds: "",
+          antiRaidEnabled: true,
+          antiRaidJoinThreshold: 8,
+          antiRaidWindowSeconds: 12,
+          antiRaidAlertCooldown: 30,
+          antiRaidTimeoutEnabled: true,
+          antiRaidTimeoutDuration: 30,
+          antiRaidLogChannelId: "",
+          antiRaidStaffRoleIds: "",
+          antiNukeEnabled: true,
+          antiNukeActionThreshold: 3,
+          antiNukeWindowSeconds: 15,
+          antiNukeAlertCooldown: 20,
+          antiNukeTimeoutEnabled: true,
+          antiNukeTimeoutDuration: 30,
+          antiNukeLogChannelId: "",
+          antiNukeStaffRoleIds: "",
         }
       );
     }
@@ -1618,92 +2350,124 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     }
 
     const logChannelId = state.automodSettingsForm.logChannelId.trim();
-    const logChannelIdNullable = logChannelId || null;
     const requestedStaffRoleIds = parseCommaSeparated(state.automodSettingsForm.staffRoleIds);
     if (requestedStaffRoleIds.length > MAX_STAFF_PING_ROLES) {
       state.statusMessage = `Staff ping roles exceed max limit (${MAX_STAFF_PING_ROLES}).`;
       return;
     }
-    const staffRoleIdsCsv = state.automodSettingsForm.staffRoleIds.trim();
     const staffRoleIds = requestedStaffRoleIds.slice(0, MAX_STAFF_PING_ROLES);
-    const staffRoleIdsNullable = staffRoleIds.length > 0 ? staffRoleIds : null;
-    const exemptRoleIdsCsv = state.automodSettingsForm.exemptRoleIds.trim();
     const exemptRoleIds = parseCommaSeparated(state.automodSettingsForm.exemptRoleIds);
-    const exemptRoleIdsNullable = exemptRoleIds.length > 0 ? exemptRoleIds : null;
-    const exemptChannelIdsCsv = state.automodSettingsForm.exemptChannelIds.trim();
     const exemptChannelIds = parseCommaSeparated(state.automodSettingsForm.exemptChannelIds);
-    const exemptChannelIdsNullable = exemptChannelIds.length > 0 ? exemptChannelIds : null;
-    const exemptUserIdsCsv = state.automodSettingsForm.exemptUserIds.trim();
     const exemptUserIds = parseCommaSeparated(state.automodSettingsForm.exemptUserIds);
-    const exemptUserIdsNullable = exemptUserIds.length > 0 ? exemptUserIds : null;
+    const antiSpamEnabled = Boolean(state.automodSettingsForm.antiSpamEnabled);
+    const antiSpamMaxMessages = Math.max(1, Number(state.automodSettingsForm.antiSpamMaxMessages || 5));
+    const antiSpamWindowSeconds = Math.max(1, Number(state.automodSettingsForm.antiSpamWindowSeconds || 3));
+    const antiSpamAlertCooldown = Math.max(1, Number(state.automodSettingsForm.antiSpamAlertCooldown || 10));
+    const antiSpamTimeoutEnabled = Boolean(state.automodSettingsForm.antiSpamTimeoutEnabled);
+    const antiSpamTimeoutDuration = Math.max(5, Number(state.automodSettingsForm.antiSpamTimeoutDuration || 30));
+    const antiSpamLogChannelId = String(state.automodSettingsForm.antiSpamLogChannelId || "").trim();
+    const antiSpamStaffRoleIdsRequested = parseCommaSeparated(state.automodSettingsForm.antiSpamStaffRoleIds);
+    if (antiSpamStaffRoleIdsRequested.length > MAX_STAFF_PING_ROLES) {
+      state.statusMessage = `Anti Spam staff ping roles exceed max limit (${MAX_STAFF_PING_ROLES}).`;
+      return;
+    }
+    const antiSpamStaffRoleIds = antiSpamStaffRoleIdsRequested.slice(0, MAX_STAFF_PING_ROLES);
+
+    const antiRaidEnabled = Boolean(state.automodSettingsForm.antiRaidEnabled);
+    const antiRaidJoinThreshold = Math.max(1, Number(state.automodSettingsForm.antiRaidJoinThreshold || 8));
+    const antiRaidWindowSeconds = Math.max(1, Number(state.automodSettingsForm.antiRaidWindowSeconds || 12));
+    const antiRaidAlertCooldown = Math.max(1, Number(state.automodSettingsForm.antiRaidAlertCooldown || 30));
+    const antiRaidTimeoutEnabled = Boolean(state.automodSettingsForm.antiRaidTimeoutEnabled);
+    const antiRaidTimeoutDuration = Math.max(5, Number(state.automodSettingsForm.antiRaidTimeoutDuration || 30));
+    const antiRaidLogChannelId = String(state.automodSettingsForm.antiRaidLogChannelId || "").trim();
+    const antiRaidStaffRoleIdsRequested = parseCommaSeparated(state.automodSettingsForm.antiRaidStaffRoleIds);
+    if (antiRaidStaffRoleIdsRequested.length > MAX_STAFF_PING_ROLES) {
+      state.statusMessage = `Anti Raid staff ping roles exceed max limit (${MAX_STAFF_PING_ROLES}).`;
+      return;
+    }
+    const antiRaidStaffRoleIds = antiRaidStaffRoleIdsRequested.slice(0, MAX_STAFF_PING_ROLES);
+
+    const antiNukeEnabled = Boolean(state.automodSettingsForm.antiNukeEnabled);
+    const antiNukeActionThreshold = Math.max(1, Number(state.automodSettingsForm.antiNukeActionThreshold || 3));
+    const antiNukeWindowSeconds = Math.max(1, Number(state.automodSettingsForm.antiNukeWindowSeconds || 15));
+    const antiNukeAlertCooldown = Math.max(1, Number(state.automodSettingsForm.antiNukeAlertCooldown || 20));
+    const antiNukeTimeoutEnabled = Boolean(state.automodSettingsForm.antiNukeTimeoutEnabled);
+    const antiNukeTimeoutDuration = Math.max(5, Number(state.automodSettingsForm.antiNukeTimeoutDuration || 30));
+    const antiNukeLogChannelId = String(state.automodSettingsForm.antiNukeLogChannelId || "").trim();
+    const antiNukeStaffRoleIdsRequested = parseCommaSeparated(state.automodSettingsForm.antiNukeStaffRoleIds);
+    if (antiNukeStaffRoleIdsRequested.length > MAX_STAFF_PING_ROLES) {
+      state.statusMessage = `Anti Nuke staff ping roles exceed max limit (${MAX_STAFF_PING_ROLES}).`;
+      return;
+    }
+    const antiNukeStaffRoleIds = antiNukeStaffRoleIdsRequested.slice(0, MAX_STAFF_PING_ROLES);
+
+    const canonicalAutomodSettings = {
+      log_channel_id: logChannelId,
+      staff_role_ids: staffRoleIds,
+      exempt_role_ids: exemptRoleIds,
+      exempt_channel_ids: exemptChannelIds,
+      exempt_user_ids: exemptUserIds,
+      antispam: {
+        enabled: antiSpamEnabled,
+        max_messages: antiSpamMaxMessages,
+        window_seconds: antiSpamWindowSeconds,
+        alert_cooldown: antiSpamAlertCooldown,
+        timeout_enabled: antiSpamTimeoutEnabled,
+        timeout_duration: antiSpamTimeoutDuration,
+        log_channel_id: antiSpamLogChannelId,
+        staff_role_ids: antiSpamStaffRoleIds,
+      },
+      antiraid: {
+        enabled: antiRaidEnabled,
+        join_threshold: antiRaidJoinThreshold,
+        window_seconds: antiRaidWindowSeconds,
+        alert_cooldown: antiRaidAlertCooldown,
+        timeout_enabled: antiRaidTimeoutEnabled,
+        timeout_duration: antiRaidTimeoutDuration,
+        log_channel_id: antiRaidLogChannelId,
+        staff_role_ids: antiRaidStaffRoleIds,
+      },
+      antinuke: {
+        enabled: antiNukeEnabled,
+        action_threshold: antiNukeActionThreshold,
+        window_seconds: antiNukeWindowSeconds,
+        alert_cooldown: antiNukeAlertCooldown,
+        timeout_enabled: antiNukeTimeoutEnabled,
+        timeout_duration: antiNukeTimeoutDuration,
+        log_channel_id: antiNukeLogChannelId,
+        staff_role_ids: antiNukeStaffRoleIds,
+      },
+      // Keep canonical flat aliases so older bot handlers continue reading the same values.
+      antispam_enabled: antiSpamEnabled,
+      antispam_max_messages: antiSpamMaxMessages,
+      antispam_window_seconds: antiSpamWindowSeconds,
+      antispam_alert_cooldown: antiSpamAlertCooldown,
+      antispam_timeout_enabled: antiSpamTimeoutEnabled,
+      antispam_timeout_duration: antiSpamTimeoutDuration,
+      antispam_log_channel_id: antiSpamLogChannelId,
+      antispam_staff_role_ids: antiSpamStaffRoleIds,
+      antiraid_enabled: antiRaidEnabled,
+      antiraid_join_threshold: antiRaidJoinThreshold,
+      antiraid_window_seconds: antiRaidWindowSeconds,
+      antiraid_alert_cooldown: antiRaidAlertCooldown,
+      antiraid_timeout_enabled: antiRaidTimeoutEnabled,
+      antiraid_timeout_duration: antiRaidTimeoutDuration,
+      antiraid_log_channel_id: antiRaidLogChannelId,
+      antiraid_staff_role_ids: antiRaidStaffRoleIds,
+      antinuke_enabled: antiNukeEnabled,
+      antinuke_action_threshold: antiNukeActionThreshold,
+      antinuke_window_seconds: antiNukeWindowSeconds,
+      antinuke_alert_cooldown: antiNukeAlertCooldown,
+      antinuke_timeout_enabled: antiNukeTimeoutEnabled,
+      antinuke_timeout_duration: antiNukeTimeoutDuration,
+      antinuke_log_channel_id: antiNukeLogChannelId,
+      antinuke_staff_role_ids: antiNukeStaffRoleIds,
+    };
 
     const payload = {
       guild_id: String(guildId || "").trim(),
-      guildId: String(guildId || "").trim(),
-      log_channel_id: logChannelId,
-      log_channel: logChannelId,
-      automod_log_channel_id: logChannelId,
-      automod_log_channel: logChannelId,
-      logChannelId: logChannelId,
-      // Nullable aliases help backends clear saved channel values when user removes them.
-      log_channel_id_nullable: logChannelIdNullable,
-      automod_log_channel_nullable: logChannelIdNullable,
-      staff_role_ids: staffRoleIds,
-      staff_roles: staffRoleIds,
-      staff_ping_role_ids: staffRoleIds,
-      automod_ping_role_ids: staffRoleIds,
-      staff_role_ids_csv: staffRoleIdsCsv,
-      staff_roles_csv: staffRoleIdsCsv,
-      staff_role_ids_nullable: staffRoleIdsNullable,
-      staff_roles_nullable: staffRoleIdsNullable,
-      staffRoleIds,
-      exempt_role_ids: exemptRoleIds,
-      exempt_roles: exemptRoleIds,
-      exempt_role_ids_csv: exemptRoleIdsCsv,
-      exempt_roles_csv: exemptRoleIdsCsv,
-      exempt_role_ids_nullable: exemptRoleIdsNullable,
-      exempt_roles_nullable: exemptRoleIdsNullable,
-      exemptRoleIds,
-      ignored_role_ids: exemptRoleIds,
-      ignored_roles: exemptRoleIds,
-      ignored_role_ids_csv: exemptRoleIdsCsv,
-      ignored_role_ids_nullable: exemptRoleIdsNullable,
-      exempt_channel_ids: exemptChannelIds,
-      exempt_channels: exemptChannelIds,
-      exempt_channel_ids_csv: exemptChannelIdsCsv,
-      exempt_channels_csv: exemptChannelIdsCsv,
-      exempt_channel_ids_nullable: exemptChannelIdsNullable,
-      exempt_channels_nullable: exemptChannelIdsNullable,
-      exemptChannelIds,
-      ignored_channel_ids: exemptChannelIds,
-      ignored_channels: exemptChannelIds,
-      ignored_channel_ids_csv: exemptChannelIdsCsv,
-      ignored_channel_ids_nullable: exemptChannelIdsNullable,
-      exempt_user_ids: exemptUserIds,
-      exempt_users: exemptUserIds,
-      exempt_user_ids_csv: exemptUserIdsCsv,
-      exempt_users_csv: exemptUserIdsCsv,
-      exempt_user_ids_nullable: exemptUserIdsNullable,
-      exempt_users_nullable: exemptUserIdsNullable,
-      exemptUserIds,
-      ignored_user_ids: exemptUserIds,
-      ignored_users: exemptUserIds,
-      ignored_user_ids_csv: exemptUserIdsCsv,
-      ignored_user_ids_nullable: exemptUserIdsNullable,
-      command_settings: {
-        automod_log_channel: logChannelId,
-        automod_log_channel_id: logChannelId,
-        staff_role_ids: staffRoleIds,
-        staff_roles: staffRoleIds,
-        staff_ping_role_ids: staffRoleIds,
-        automod_ping_role_ids: staffRoleIds,
-        exempt_role_ids: exemptRoleIds,
-        exempt_channel_ids: exemptChannelIds,
-        exempt_user_ids: exemptUserIds,
-        ignored_role_ids: exemptRoleIds,
-        ignored_channel_ids: exemptChannelIds,
-        ignored_user_ids: exemptUserIds,
-      },
+      command_settings: canonicalAutomodSettings,
+      automod_settings: canonicalAutomodSettings,
     };
 
     const expectedSettings = {
@@ -1712,6 +2476,30 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       exemptRoleIds,
       exemptChannelIds,
       exemptUserIds,
+      antiSpamEnabled,
+      antiSpamMaxMessages,
+      antiSpamWindowSeconds,
+      antiSpamAlertCooldown,
+      antiSpamTimeoutEnabled,
+      antiSpamTimeoutDuration,
+      antiSpamLogChannelId,
+      antiSpamStaffRoleIds,
+      antiRaidEnabled,
+      antiRaidJoinThreshold,
+      antiRaidWindowSeconds,
+      antiRaidAlertCooldown,
+      antiRaidTimeoutEnabled,
+      antiRaidTimeoutDuration,
+      antiRaidLogChannelId,
+      antiRaidStaffRoleIds,
+      antiNukeEnabled,
+      antiNukeActionThreshold,
+      antiNukeWindowSeconds,
+      antiNukeAlertCooldown,
+      antiNukeTimeoutEnabled,
+      antiNukeTimeoutDuration,
+      antiNukeLogChannelId,
+      antiNukeStaffRoleIds,
     };
 
     const candidates = [
@@ -1836,6 +2624,11 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
     try {
       const submittedKeyword = state.automodForm.keyword.trim();
+      const escalationEnabled = Boolean(state.automodForm.escalationEnabled);
+      const escalationWarnThreshold = Math.max(1, Number(state.automodForm.escalationWarnThreshold || 1));
+      const escalationAction = String(state.automodForm.escalationAction || "timeout");
+      const escalationTimeoutDuration = Math.max(1, Number(state.automodForm.escalationTimeoutDuration || 10));
+      const escalationResetMinutes = Math.max(0, Number(state.automodForm.escalationResetMinutes || 0));
       const response = await fetch(`${backendUrl}/api/guilds/rules?guild_id=${encodeURIComponent(guildId)}`, {
         method: "POST",
         credentials: "include",
@@ -1852,6 +2645,26 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           severity: Math.max(1, Math.min(3, Number(state.automodForm.severity || 2))),
           threshold: state.automodForm.threshold,
           enabled: true,
+          timeout_duration: Math.max(1, Number(state.automodForm.timeoutDuration || 10)),
+          escalation_enabled: escalationEnabled,
+          escalation_warn_threshold: escalationWarnThreshold,
+          escalation_action: escalationAction,
+          escalation_timeout_duration: escalationTimeoutDuration,
+          escalation_reset_minutes: escalationResetMinutes,
+          escalationEnabled,
+          escalationWarnThreshold,
+          escalationAction,
+          escalationTimeoutDuration,
+          escalationResetMinutes,
+          offense_escalation_enabled: escalationEnabled,
+          offense_escalation_action: escalationAction,
+          escalation: {
+            enabled: escalationEnabled,
+            warn_threshold: escalationWarnThreshold,
+            action: escalationAction,
+            timeout_duration: escalationTimeoutDuration,
+            reset_minutes: escalationResetMinutes,
+          },
         }),
       });
 
@@ -1970,6 +2783,26 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       ignored_users: exemptUserIds,
       ignored_user_ids_csv: exemptUserIdsCsv,
       ignored_user_ids_nullable: exemptUserIdsNullable,
+      timeout_duration: Math.max(1, Number(state.editingRuleForm.timeoutDuration || 10)),
+      escalation_enabled: Boolean(state.editingRuleForm.escalationEnabled),
+      escalation_warn_threshold: Math.max(1, Number(state.editingRuleForm.escalationWarnThreshold || 1)),
+      escalation_action: String(state.editingRuleForm.escalationAction || "timeout"),
+      escalation_timeout_duration: Math.max(1, Number(state.editingRuleForm.escalationTimeoutDuration || 10)),
+      escalation_reset_minutes: Math.max(0, Number(state.editingRuleForm.escalationResetMinutes || 0)),
+      escalationEnabled: Boolean(state.editingRuleForm.escalationEnabled),
+      escalationWarnThreshold: Math.max(1, Number(state.editingRuleForm.escalationWarnThreshold || 1)),
+      escalationAction: String(state.editingRuleForm.escalationAction || "timeout"),
+      escalationTimeoutDuration: Math.max(1, Number(state.editingRuleForm.escalationTimeoutDuration || 10)),
+      escalationResetMinutes: Math.max(0, Number(state.editingRuleForm.escalationResetMinutes || 0)),
+      offense_escalation_enabled: Boolean(state.editingRuleForm.escalationEnabled),
+      offense_escalation_action: String(state.editingRuleForm.escalationAction || "timeout"),
+      escalation: {
+        enabled: Boolean(state.editingRuleForm.escalationEnabled),
+        warn_threshold: Math.max(1, Number(state.editingRuleForm.escalationWarnThreshold || 1)),
+        action: String(state.editingRuleForm.escalationAction || "timeout"),
+        timeout_duration: Math.max(1, Number(state.editingRuleForm.escalationTimeoutDuration || 10)),
+        reset_minutes: Math.max(0, Number(state.editingRuleForm.escalationResetMinutes || 0)),
+      },
     };
 
     const expectedRuleFields = {
@@ -2353,6 +3186,17 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
     const guildName = meta.guildName;
     const guildIconUrl = selectedGuild ? getGuildIconUrl(selectedGuild, defaultImage) : defaultImage;
 
+    renderLeftSidebar({
+      guildId,
+      guildName,
+      guildIconUrl,
+      activePage: "",
+      sidebarId: "guild-rule-editor-sidebar",
+      activeRuleEditor: true,
+      showRuleEditorLink: true,
+      ruleEditorUrl: `/pages/rule-editor.html?guild_id=${encodeURIComponent(String(guildId || "").trim())}&rule_id=${encodeURIComponent(String(ruleId || "").trim())}`,
+    });
+
     if (!guildId) {
       root.innerHTML = `<section class="page-card"><p class="subtitle">Missing guild id.</p></section>`;
       return;
@@ -2420,120 +3264,234 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       <section class="content-section rule-editor-page">
         <h3>Rule Editor</h3>
         <div class="automod-rule-edit" id="rule-editor-form" data-rule-id="${escapeHtml(ruleId)}">
-          <div class="automod-edit-meta" aria-live="polite">
-            ${
-              editHasChanges
-                ? `<span class="automod-edit-dirty">Unsaved changes: ${changedFields
-                    .map((field) => formatChangedFieldName(field))
-                    .join(", ")}</span>`
-                : '<span class="automod-edit-clean">No changes yet</span>'
-            }
+          <div class="settings-hero-card rule-builder-hero">
+            <div class="settings-hero-copy">
+              <span class="settings-kicker">Rule Editor</span>
+              <strong>Refine this AutoMod rule</strong>
+              <p>Adjust matching logic, severity, routing, and safety controls without leaving the editor.</p>
+              <div class="automod-edit-meta" aria-live="polite">
+                ${
+                  editHasChanges
+                    ? `<span class="automod-edit-dirty">Unsaved changes: ${changedFields
+                        .map((field) => formatChangedFieldName(field))
+                        .join(", ")}</span>`
+                    : '<span class="automod-edit-clean">No changes yet</span>'
+                }
+              </div>
+            </div>
+
+            <div class="rule-builder-status-column">
+              <label class="automod-rule-label settings-toggle-card rule-builder-name-card">
+                Rule Name
+                <input name="name" value="${escapeHtml(state.editingRuleForm.name)}" list="automod-rule-name-presets" data-edit-input />
+              </label>
+
+              <label class="automod-enabled-label settings-inline-toggle rule-builder-inline-toggle">
+                <input type="checkbox" name="enabled" ${state.editingRuleForm.enabled ? "checked" : ""} data-edit-input />
+                <span>Rule Enabled</span>
+              </label>
+            </div>
           </div>
 
-          <label class="automod-rule-label">
-            Rule Name
-            <input name="name" value="${escapeHtml(state.editingRuleForm.name)}" list="automod-rule-name-presets" data-edit-input />
-          </label>
-
-          <label class="automod-rule-label automod-preset-control">
-            Presets
-            <div class="preset-toggle-list" role="group" aria-label="Editor presets">
-              ${RULE_NAME_PRESETS.map(
-                (name) =>
-                  `<button class="preset-toggle-btn ${editorSelectedPresets.includes(name) ? "is-active" : ""}" type="button" data-preset-toggle data-preset-context="editor" data-preset-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`
-              ).join("")}
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Presets</h5>
+              <p>Apply a preset to quickly reshape the rule before making manual edits.</p>
             </div>
-            <span class="field-hint">Click presets to toggle them on or off.</span>
-          </label>
+            <label class="automod-rule-label automod-preset-control rule-builder-preset-control">
+              Preset Library
+              <div class="preset-toggle-list" role="group" aria-label="Editor presets">
+                ${RULE_NAME_PRESETS.map(
+                  (name) =>
+                    `<button class="preset-toggle-btn ${editorSelectedPresets.includes(name) ? "is-active" : ""}" type="button" data-preset-toggle data-preset-context="editor" data-preset-name="${escapeHtml(name)}">${escapeHtml(name)}</button>`
+                ).join("")}
+              </div>
+              <span class="field-hint">Click presets to toggle them on or off.</span>
+            </label>
+          </section>
 
-          <label class="automod-rule-label">
-            Keywords (comma-separated)
-            <input name="keyword" value="${escapeHtml(state.editingRuleForm.keyword)}" data-edit-input />
-            <span class="token-counter">${editKeywordTokens.length} / ${MAX_WORDS} words</span>
-          </label>
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Matching Logic</h5>
+              <p>Update the content filters this rule uses to decide when to trigger.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-rule-label">
+                Keywords (comma-separated)
+                <input name="keyword" value="${escapeHtml(state.editingRuleForm.keyword)}" placeholder="badword, badword2" data-edit-input />
+                <span class="token-counter">${editKeywordTokens.length} / ${MAX_WORDS} words</span>
+                ${
+                  editKeywordTokens.length > 0
+                    ? `<span class="token-chip-list">${editKeywordTokens.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")}</span>`
+                    : ""
+                }
+              </label>
 
-          <label class="automod-rule-label">
-            Allowed Keywords (comma-separated)
-            <input name="allowedKeywords" value="${escapeHtml(state.editingRuleForm.allowedKeywords)}" data-edit-input />
-            <span class="token-counter">${editAllowedKeywordTokens.length} allowed</span>
-          </label>
+              <label class="automod-rule-label">
+                Allowed Keywords (comma-separated)
+                <input name="allowedKeywords" value="${escapeHtml(state.editingRuleForm.allowedKeywords)}" placeholder="example.com, trusted phrase" data-edit-input />
+                <span class="token-counter">${editAllowedKeywordTokens.length} allowed</span>
+                ${
+                  editAllowedKeywordTokens.length > 0
+                    ? `<span class="token-chip-list">${editAllowedKeywordTokens
+                        .map((token) => `<span class="token-chip muted">${escapeHtml(token)}</span>`)
+                        .join("")}</span>`
+                    : ""
+                }
+              </label>
 
-          <label class="automod-rule-label">
-            Regex Patterns (comma-separated or one per line)
-            <textarea name="pattern" rows="5" data-edit-input>${escapeHtml(state.editingRuleForm.pattern)}</textarea>
-            <span class="field-hint">Use one regex per line for clear separation.</span>
-            <span class="token-counter">${editRegexTokens.length} / ${MAX_REGEXES} regexes</span>
-          </label>
+              <label class="automod-rule-label settings-subgroup-wide">
+                Regex Patterns (comma-separated or one per line)
+                <textarea name="pattern" rows="5" placeholder="\\b(badword)\\b&#10;(https?:\\/\\/\\S+)" data-edit-input>${escapeHtml(state.editingRuleForm.pattern)}</textarea>
+                <span class="field-hint">Use one regex per line for clear separation.</span>
+                <span class="token-counter">${editRegexTokens.length} / ${MAX_REGEXES} regexes</span>
+                ${
+                  editRegexTokens.length > 0
+                    ? `<span class="token-chip-list">${editRegexTokens.map((token) => `<span class="token-chip">${escapeHtml(token)}</span>`).join("")}</span>`
+                    : ""
+                }
+              </label>
+            </div>
+          </section>
 
-          <label class="automod-rule-label">
-            Action
-            <select name="action" data-edit-input>
-              ${RULE_ACTION_OPTIONS.map(
-                (action) =>
-                  `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
-              ).join("")}
-            </select>
-          </label>
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Response</h5>
+              <p>Set the action, severity, and trigger threshold that define the rule response.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-rule-label">
+                Action
+                <select name="action" data-edit-input>
+                  ${RULE_ACTION_OPTIONS.map(
+                    (action) =>
+                      `<option value="${escapeHtml(action)}" ${state.editingRuleForm.action === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                  ).join("")}
+                </select>
+              </label>
 
-          <label class="automod-rule-label">
-            Severity
-            <select name="severity" data-edit-input>
-              ${RULE_SEVERITY_OPTIONS.map(
-                (option) =>
-                  `<option value="${option.value}" ${Number(state.editingRuleForm.severity || 2) === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`
-              ).join("")}
-            </select>
-            <span class="field-hint">Low severity only logs to staff and will not delete the message.</span>
-          </label>
+              ${state.editingRuleForm.action === "timeout" ? `
+              <label class="automod-rule-label">
+                Timeout Duration (minutes)
+                <input name="timeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.timeoutDuration || 10))}" data-edit-input />
+                <span class="field-hint">How long the user will be timed out when this rule triggers.</span>
+              </label>
+              ` : ""}
 
-          <label class="automod-rule-label">
-            Threshold
-            <input name="threshold" type="number" min="1" step="1" value="${escapeHtml(state.editingRuleForm.threshold)}" data-edit-input />
-          </label>
+              <label class="automod-rule-label">
+                Severity
+                <select name="severity" data-edit-input>
+                  ${RULE_SEVERITY_OPTIONS.map(
+                    (option) =>
+                      `<option value="${option.value}" ${Number(state.editingRuleForm.severity || 2) === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>`
+                  ).join("")}
+                </select>
+                <span class="field-hint">Low severity only logs to staff and will not delete the message.</span>
+              </label>
 
-          <label class="automod-rule-label">
-            Exempt Role IDs (comma-separated)
-            <input name="exemptRoleIds" value="${escapeHtml(state.editingRuleForm.exemptRoleIds)}" data-edit-input />
-          </label>
+              <label class="automod-rule-label settings-subgroup-wide">
+                Threshold
+                <input name="threshold" type="number" min="1" step="1" value="${escapeHtml(state.editingRuleForm.threshold)}" data-edit-input />
+              </label>
+            </div>
+          </section>
 
-          <label class="automod-rule-label">
-            Exempt Channel IDs (comma-separated)
-            <input name="exemptChannelIds" value="${escapeHtml(state.editingRuleForm.exemptChannelIds)}" data-edit-input />
-          </label>
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Offense Escalation</h5>
+              <p>Automatically escalate repeat violations through a configurable punishment ladder.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-enabled-label">
+                <input type="checkbox" name="escalationEnabled" ${state.editingRuleForm.escalationEnabled ? "checked" : ""} data-edit-input />
+                Enable offense escalation
+              </label>
+              ${state.editingRuleForm.escalationEnabled ? `
+              <label class="automod-rule-label">
+                Warn Threshold
+                <input name="escalationWarnThreshold" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationWarnThreshold || 1))}" data-edit-input />
+                <span class="field-hint">Number of warnings to issue before escalating. After this many offenses the escalation action fires instead.</span>
+              </label>
+              <label class="automod-rule-label">
+                Escalation Action
+                <select name="escalationAction" data-edit-input>
+                  ${ESCALATION_ACTION_OPTIONS.map(
+                    (action) =>
+                      `<option value="${escapeHtml(action)}" ${state.editingRuleForm.escalationAction === action ? "selected" : ""}>${escapeHtml(formatActionLabel(action))}</option>`
+                  ).join("")}
+                </select>
+                <span class="field-hint">Action taken once the warn threshold is exceeded.</span>
+              </label>
+              ${state.editingRuleForm.escalationAction === "timeout" ? `
+              <label class="automod-rule-label">
+                Escalation Timeout Duration (minutes)
+                <input name="escalationTimeoutDuration" type="number" min="1" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationTimeoutDuration || 10))}" data-edit-input />
+                <span class="field-hint">How long the timeout lasts when a user exceeds the warn threshold.</span>
+              </label>
+              ` : ""}
+              <label class="automod-rule-label">
+                Offense Reset Window (minutes)
+                <input name="escalationResetMinutes" type="number" min="0" step="1" value="${escapeHtml(String(state.editingRuleForm.escalationResetMinutes ?? 0))}" data-edit-input />
+                <span class="field-hint">Minutes of good behaviour before a user's offense count resets. Set to 0 to never reset.</span>
+              </label>
+              ` : ""}
+            </div>
+          </section>
 
-          <label class="automod-rule-label">
-            Exempt User IDs (comma-separated)
-            <input name="exemptUserIds" value="${escapeHtml(state.editingRuleForm.exemptUserIds)}" data-edit-input />
-          </label>
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Exemptions</h5>
+              <p>Exclude trusted roles, channels, or users from this specific rule.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-rule-label">
+                Exempt Role IDs (comma-separated)
+                <input name="exemptRoleIds" value="${escapeHtml(state.editingRuleForm.exemptRoleIds)}" placeholder="111111111111111111, 222222222222222222" data-edit-input />
+              </label>
 
-          <label class="automod-rule-label">
-            AutoMod Log Channel ID
-            <input
-              name="logChannelId"
-              value="${escapeHtml(state.automodSettingsForm.logChannelId)}"
-              data-editor-setting
-              placeholder="123456789012345678"
-            />
-          </label>
+              <label class="automod-rule-label">
+                Exempt Channel IDs (comma-separated)
+                <input name="exemptChannelIds" value="${escapeHtml(state.editingRuleForm.exemptChannelIds)}" placeholder="333333333333333333, 444444444444444444" data-edit-input />
+              </label>
 
-          <label class="automod-rule-label">
-            Staff Ping Role IDs (max 5, comma-separated)
-            <input
-              name="staffRoleIds"
-              value="${escapeHtml(state.automodSettingsForm.staffRoleIds)}"
-              data-editor-setting
-              placeholder="111111111111111111, 222222222222222222"
-            />
-            <span class="token-counter">${parseCommaSeparated(state.automodSettingsForm.staffRoleIds).length} / ${MAX_STAFF_PING_ROLES} roles</span>
-          </label>
+              <label class="automod-rule-label settings-subgroup-wide">
+                Exempt User IDs (comma-separated)
+                <input name="exemptUserIds" value="${escapeHtml(state.editingRuleForm.exemptUserIds)}" placeholder="555555555555555555, 666666666666666666" data-edit-input />
+              </label>
+            </div>
+          </section>
 
-          <label class="automod-enabled-label">
-            <input type="checkbox" name="enabled" ${state.editingRuleForm.enabled ? "checked" : ""} data-edit-input />
-            Enabled
-          </label>
+          <section class="settings-subgroup">
+            <div class="settings-subgroup-header">
+              <h5>Alert Routing</h5>
+              <p>These settings control where AutoMod alerts land while you work on the rule.</p>
+            </div>
+            <div class="settings-subgroup-grid">
+              <label class="automod-rule-label">
+                AutoMod Log Channel ID
+                <input
+                  name="logChannelId"
+                  value="${escapeHtml(state.automodSettingsForm.logChannelId)}"
+                  data-editor-setting
+                  placeholder="123456789012345678"
+                />
+              </label>
+
+              <label class="automod-rule-label">
+                Staff Ping Role IDs (max 5, comma-separated)
+                <input
+                  name="staffRoleIds"
+                  value="${escapeHtml(state.automodSettingsForm.staffRoleIds)}"
+                  data-editor-setting
+                  placeholder="111111111111111111, 222222222222222222"
+                />
+                <span class="token-counter">${parseCommaSeparated(state.automodSettingsForm.staffRoleIds).length} / ${MAX_STAFF_PING_ROLES} roles</span>
+              </label>
+            </div>
+          </section>
 
           <div class="automod-rule-actions automod-rule-actions-full">
-            <button class="action-btn" type="button" data-save-edit ${state.isSavingEdit || state.isSavingSettings || isEditLimitExceeded || (!editHasChanges && !settingsHasChanges) ? "disabled" : ""}>
+            <button class="action-btn primary" type="button" data-save-edit ${state.isSavingEdit || state.isSavingSettings || isEditLimitExceeded || !editHasChanges ? "disabled" : ""}>
               ${state.isSavingEdit ? "Saving..." : "Save Rule"}
             </button>
             <button class="action-btn secondary" type="button" data-save-settings ${state.isSavingSettings ? "disabled" : ""}>
@@ -2612,7 +3570,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         if (input instanceof HTMLInputElement && input.type === "checkbox") {
           state.editingRuleForm[name] = input.checked;
         } else if (input instanceof HTMLInputElement && input.type === "number") {
-          state.editingRuleForm[name] = Math.max(1, Number(input.value || 1));
+          const min = Number(input.min || 1);
+          state.editingRuleForm[name] = Math.max(min, Number(input.value || min));
         } else {
           state.editingRuleForm[name] = input.value;
         }

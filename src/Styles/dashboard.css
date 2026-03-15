@@ -1,18 +1,19 @@
 .dashboard {
   display: flex;
   gap: 1rem;
-  min-height: calc(100vh - 86px);
+  min-height: 100%;
+  min-width: 100%;
 }
 
 .sidebar {
-  width: 290px;
+  left: 0%;
+  width: 280px;
   background: linear-gradient(180deg, rgba(9, 16, 30, 0.93) 0%, rgba(8, 14, 27, 0.86) 100%);
   border: 1px solid rgba(149, 182, 229, 0.22);
   border-radius: 18px;
   padding: 1.2rem 0.95rem;
   position: sticky;
   top: 78px;
-  height: calc(100vh - 100px);
   overflow-y: auto;
   box-shadow: var(--shadow-soft);
 }
@@ -109,15 +110,27 @@
 .main-content {
   flex: 1;
   min-width: 0;
-  min-height: calc(100vh - 110px);
+  min-height: 1vh;
   padding: 0.2rem 0 0.6rem;
 }
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
   gap: 0.9rem;
   align-content: flex-start;
+}
+
+@media (max-width: 1280px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .dashboard-card {
@@ -147,6 +160,43 @@
   transform: none;
   border-color: rgba(149, 182, 229, 0.24);
   box-shadow: var(--shadow-soft);
+}
+
+.dashboard-card-bot-present {
+  border-color: rgba(72, 185, 89, 0.8);
+  box-shadow: 0 0 0 1px rgba(72, 185, 89, 0.4), var(--shadow-soft);
+}
+
+.dashboard-card-bot-present:hover {
+  border-color: rgba(50, 145, 65, 1);
+}
+
+.dashboard-card-no-bot {
+  border-color: rgba(241, 148, 0, 0.85);
+  box-shadow: 0 0 0 1px rgba(241, 148, 0, 0.35), var(--shadow-soft);
+}
+
+.dashboard-card-no-bot:hover {
+  border-color: rgba(230, 126, 34, 1);
+}
+
+.dashboard-card-add-btn {
+  display: inline-block;
+  margin-top: 0.7rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(72, 185, 89, 0.8);
+  background-color: rgba(72, 185, 89, 0.14);
+  color: #a7f0a0;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.dashboard-card-add-btn:hover {
+  background-color: rgba(72, 185, 89, 0.28);
+  border-color: rgba(72, 185, 89, 1);
+  color: #e9ffeb;
 }
 
 .guild-icon-image,
@@ -267,6 +317,21 @@
 .action-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 12px 22px rgba(5, 14, 31, 0.34);
+}
+
+.action-btn:disabled,
+.action-btn[disabled] {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: saturate(0.65);
+  box-shadow: none;
+  transform: none;
+}
+
+.action-btn:disabled:hover,
+.action-btn[disabled]:hover {
+  box-shadow: none;
+  transform: none;
 }
 
 .warning-banner {

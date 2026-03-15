@@ -110,6 +110,7 @@ async function hydrateAuth() {
 
     if (response.status === 401) {
       appState.user = null;
+      appState.botGuilds = [];
       return;
     }
 
@@ -118,9 +119,22 @@ async function hydrateAuth() {
     }
 
     appState.user = await response.json();
+
+    // Fetch guild list from backend to detect guilds where FluxMod is already installed
+    const botGuildsResponse = await fetchWithAuthFallback("/api/guilds");
+    if (botGuildsResponse.ok) {
+      appState.botGuilds = await botGuildsResponse.json();
+    } else {
+      appState.botGuilds = [];
+    }
+
+    if (appState.user) {
+      appState.user.botGuilds = appState.botGuilds;
+    }
   } catch (error) {
     console.error(error);
     appState.user = null;
+    appState.botGuilds = [];
   } finally {
     appState.isAuthLoading = false;
     render();
@@ -415,15 +429,20 @@ function mountDashboardPage() {
     return;
   }
 
-  grid.querySelectorAll("[data-open='true']").forEach((card) => {
-    card.addEventListener("click", () => {
-      const guildId = card.getAttribute("data-guild-id") || "";
-      if (!guildId) {
-        return;
-      }
+  grid.querySelectorAll(".dashboard-card").forEach((card) => {
+    const hasInviteButton = Boolean(card.querySelector(".dashboard-card-add-btn"));
+    const open = card.getAttribute("data-open") === "true";
 
-      navigate(`/pages/guild-dashboard.html?guild_id=${encodeURIComponent(guildId)}`);
-    });
+    if (open && !hasInviteButton) {
+      card.addEventListener("click", () => {
+        const guildId = card.getAttribute("data-guild-id") || "";
+        if (!guildId) {
+          return;
+        }
+
+        navigate(`/pages/guild-dashboard.html?guild_id=${encodeURIComponent(guildId)}`);
+      });
+    }
   });
 }
 
