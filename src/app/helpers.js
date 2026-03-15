@@ -150,6 +150,7 @@ function pickRuleText(...candidates) {
 }
 
 export function normalizeRule(rule = {}) {
+  const escalation = rule?.escalation || rule?.offense_escalation || rule?.offenseEscalation || {};
   const keyword = pickRuleText(
     rule?.keyword,
     rule?.keywords,
@@ -212,19 +213,48 @@ export function normalizeRule(rule = {}) {
       rule?.timeout_duration ?? rule?.timeoutDuration ?? 10
     ) || 10,
     escalationEnabled: Boolean(
-      rule?.escalation_enabled ?? rule?.escalationEnabled ?? false
+      rule?.escalation_enabled ??
+        rule?.escalationEnabled ??
+        rule?.offense_escalation_enabled ??
+        rule?.offenseEscalationEnabled ??
+        escalation?.enabled ??
+        escalation?.is_enabled ??
+        false
     ),
     escalationWarnThreshold: Math.max(1, Number(
-      rule?.escalation_warn_threshold ?? rule?.escalationWarnThreshold ?? 1
+      rule?.escalation_warn_threshold ??
+        rule?.escalationWarnThreshold ??
+        rule?.warn_threshold ??
+        rule?.warnThreshold ??
+        escalation?.warn_threshold ??
+        escalation?.warnThreshold ??
+        1
     ) || 1),
     escalationAction: String(
-      rule?.escalation_action ?? rule?.escalationAction ?? "timeout"
+      rule?.escalation_action ??
+        rule?.escalationAction ??
+        rule?.offense_escalation_action ??
+        rule?.offenseEscalationAction ??
+        escalation?.action ??
+        "timeout"
     ),
     escalationTimeoutDuration: Number(
-      rule?.escalation_timeout_duration ?? rule?.escalationTimeoutDuration ?? 10
+      rule?.escalation_timeout_duration ??
+        rule?.escalationTimeoutDuration ??
+        rule?.timeout_duration ??
+        rule?.timeoutDuration ??
+        escalation?.timeout_duration ??
+        escalation?.timeoutDuration ??
+        10
     ) || 10,
     escalationResetMinutes: Math.max(0, Number(
-      rule?.escalation_reset_minutes ?? rule?.escalationResetMinutes ?? 0
+      rule?.escalation_reset_minutes ??
+        rule?.escalationResetMinutes ??
+        rule?.reset_minutes ??
+        rule?.resetMinutes ??
+        escalation?.reset_minutes ??
+        escalation?.resetMinutes ??
+        0
     ) || 0),
   };
 }

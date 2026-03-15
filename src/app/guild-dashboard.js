@@ -290,6 +290,14 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
     target.focus();
 
+    if (target instanceof HTMLInputElement && snapshot.type === "number") {
+      // Number inputs do not reliably support setSelectionRange; reset value to keep caret at the end.
+      const currentValue = target.value;
+      target.value = "";
+      target.value = currentValue;
+      return;
+    }
+
     if (
       (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) &&
       snapshot.selectionStart !== null &&
@@ -447,6 +455,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
   }
 
   function toRuleEditForm(rule = {}) {
+    const escalation = rule?.escalation || rule?.offense_escalation || rule?.offenseEscalation || {};
+
     return {
       name: rule?.name || "",
       keyword: rule?.keyword || "",
@@ -492,11 +502,63 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         )
       ),
       timeoutDuration: Math.max(1, Number(rule?.timeout_duration ?? rule?.timeoutDuration ?? 10) || 10),
-      escalationEnabled: Boolean(rule?.escalation_enabled ?? rule?.escalationEnabled ?? false),
-      escalationWarnThreshold: Math.max(1, Number(rule?.escalation_warn_threshold ?? rule?.escalationWarnThreshold ?? 1) || 1),
-      escalationAction: String(rule?.escalation_action ?? rule?.escalationAction ?? "timeout"),
-      escalationTimeoutDuration: Math.max(1, Number(rule?.escalation_timeout_duration ?? rule?.escalationTimeoutDuration ?? 10) || 10),
-      escalationResetMinutes: Math.max(0, Number(rule?.escalation_reset_minutes ?? rule?.escalationResetMinutes ?? 0) || 0),
+      escalationEnabled: Boolean(
+        rule?.escalation_enabled ??
+          rule?.escalationEnabled ??
+          rule?.offense_escalation_enabled ??
+          rule?.offenseEscalationEnabled ??
+          escalation?.enabled ??
+          escalation?.is_enabled ??
+          false
+      ),
+      escalationWarnThreshold: Math.max(
+        1,
+        Number(
+          rule?.escalation_warn_threshold ??
+            rule?.escalationWarnThreshold ??
+            rule?.offense_escalation_warn_threshold ??
+            rule?.offenseEscalationWarnThreshold ??
+            rule?.warn_threshold ??
+            rule?.warnThreshold ??
+            escalation?.warn_threshold ??
+            escalation?.warnThreshold ??
+            1
+        ) || 1
+      ),
+      escalationAction: String(
+        rule?.escalation_action ??
+          rule?.escalationAction ??
+          rule?.offense_escalation_action ??
+          rule?.offenseEscalationAction ??
+          escalation?.action ??
+          "timeout"
+      ),
+      escalationTimeoutDuration: Math.max(
+        1,
+        Number(
+          rule?.escalation_timeout_duration ??
+            rule?.escalationTimeoutDuration ??
+            rule?.offense_escalation_timeout_duration ??
+            rule?.offenseEscalationTimeoutDuration ??
+            escalation?.timeout_duration ??
+            escalation?.timeoutDuration ??
+            10
+        ) || 10
+      ),
+      escalationResetMinutes: Math.max(
+        0,
+        Number(
+          rule?.escalation_reset_minutes ??
+            rule?.escalationResetMinutes ??
+            rule?.offense_escalation_reset_minutes ??
+            rule?.offenseEscalationResetMinutes ??
+            rule?.reset_minutes ??
+            rule?.resetMinutes ??
+            escalation?.reset_minutes ??
+            escalation?.resetMinutes ??
+            0
+        ) || 0
+      ),
     };
   }
 
@@ -1638,7 +1700,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         if (input instanceof HTMLInputElement && input.type === "checkbox") {
           state.editingRuleForm[name] = input.checked;
         } else if (input instanceof HTMLInputElement && input.type === "number") {
-          state.editingRuleForm[name] = Math.max(1, Number(input.value || 1));
+          const min = Number(input.min || 1);
+          state.editingRuleForm[name] = Math.max(min, Number(input.value || min));
         } else {
           state.editingRuleForm[name] = input.value;
         }
@@ -2077,6 +2140,11 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
 
     try {
       const submittedKeyword = state.automodForm.keyword.trim();
+      const escalationEnabled = Boolean(state.automodForm.escalationEnabled);
+      const escalationWarnThreshold = Math.max(1, Number(state.automodForm.escalationWarnThreshold || 1));
+      const escalationAction = String(state.automodForm.escalationAction || "timeout");
+      const escalationTimeoutDuration = Math.max(1, Number(state.automodForm.escalationTimeoutDuration || 10));
+      const escalationResetMinutes = Math.max(0, Number(state.automodForm.escalationResetMinutes || 0));
       const response = await fetch(`${backendUrl}/api/guilds/rules?guild_id=${encodeURIComponent(guildId)}`, {
         method: "POST",
         credentials: "include",
@@ -2094,11 +2162,25 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
           threshold: state.automodForm.threshold,
           enabled: true,
           timeout_duration: Math.max(1, Number(state.automodForm.timeoutDuration || 10)),
-          escalation_enabled: Boolean(state.automodForm.escalationEnabled),
-          escalation_warn_threshold: Math.max(1, Number(state.automodForm.escalationWarnThreshold || 1)),
-          escalation_action: String(state.automodForm.escalationAction || "timeout"),
-          escalation_timeout_duration: Math.max(1, Number(state.automodForm.escalationTimeoutDuration || 10)),
-          escalation_reset_minutes: Math.max(0, Number(state.automodForm.escalationResetMinutes || 0)),
+          escalation_enabled: escalationEnabled,
+          escalation_warn_threshold: escalationWarnThreshold,
+          escalation_action: escalationAction,
+          escalation_timeout_duration: escalationTimeoutDuration,
+          escalation_reset_minutes: escalationResetMinutes,
+          escalationEnabled,
+          escalationWarnThreshold,
+          escalationAction,
+          escalationTimeoutDuration,
+          escalationResetMinutes,
+          offense_escalation_enabled: escalationEnabled,
+          offense_escalation_action: escalationAction,
+          escalation: {
+            enabled: escalationEnabled,
+            warn_threshold: escalationWarnThreshold,
+            action: escalationAction,
+            timeout_duration: escalationTimeoutDuration,
+            reset_minutes: escalationResetMinutes,
+          },
         }),
       });
 
@@ -2223,6 +2305,20 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
       escalation_action: String(state.editingRuleForm.escalationAction || "timeout"),
       escalation_timeout_duration: Math.max(1, Number(state.editingRuleForm.escalationTimeoutDuration || 10)),
       escalation_reset_minutes: Math.max(0, Number(state.editingRuleForm.escalationResetMinutes || 0)),
+      escalationEnabled: Boolean(state.editingRuleForm.escalationEnabled),
+      escalationWarnThreshold: Math.max(1, Number(state.editingRuleForm.escalationWarnThreshold || 1)),
+      escalationAction: String(state.editingRuleForm.escalationAction || "timeout"),
+      escalationTimeoutDuration: Math.max(1, Number(state.editingRuleForm.escalationTimeoutDuration || 10)),
+      escalationResetMinutes: Math.max(0, Number(state.editingRuleForm.escalationResetMinutes || 0)),
+      offense_escalation_enabled: Boolean(state.editingRuleForm.escalationEnabled),
+      offense_escalation_action: String(state.editingRuleForm.escalationAction || "timeout"),
+      escalation: {
+        enabled: Boolean(state.editingRuleForm.escalationEnabled),
+        warn_threshold: Math.max(1, Number(state.editingRuleForm.escalationWarnThreshold || 1)),
+        action: String(state.editingRuleForm.escalationAction || "timeout"),
+        timeout_duration: Math.max(1, Number(state.editingRuleForm.escalationTimeoutDuration || 10)),
+        reset_minutes: Math.max(0, Number(state.editingRuleForm.escalationResetMinutes || 0)),
+      },
     };
 
     const expectedRuleFields = {
@@ -2990,7 +3086,8 @@ export function createGuildDashboardController({ backendUrl, appState, defaultIm
         if (input instanceof HTMLInputElement && input.type === "checkbox") {
           state.editingRuleForm[name] = input.checked;
         } else if (input instanceof HTMLInputElement && input.type === "number") {
-          state.editingRuleForm[name] = Math.max(1, Number(input.value || 1));
+          const min = Number(input.min || 1);
+          state.editingRuleForm[name] = Math.max(min, Number(input.value || min));
         } else {
           state.editingRuleForm[name] = input.value;
         }
