@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import {
   Box,
   Button,
@@ -83,6 +84,11 @@ import {
   LHS_CATEGORIES,
   DEFAULT_LHS_THRESHOLD,
 } from "@/utils/helpers";
+import { staggerContainer, fadeUpItem } from "@/utils/animations";
+
+const MotionBox = motion(Box);
+const MotionCard = motion(Card);
+const MotionSimpleGrid = motion(SimpleGrid);
 
 const SETTINGS_PAGES = [
   { key: "automod", label: "AutoMod", icon: FiShield },
@@ -93,30 +99,49 @@ const SETTINGS_PAGES = [
 ];
 
 function Sidebar({ guild, activeTab, onTabChange }) {
-  const bg = useColorModeValue("white", "slate.800");
   const borderColor = useColorModeValue("slate.200", "slate.700");
   const guildName = getGuildName(guild);
   const guildIcon = getGuildIconUrl(guild, "/default-guild.png");
 
   return (
-    <Card bg={bg} borderColor={borderColor} borderWidth="1px" h="fit-content" position="sticky" top={20}>
-      <CardBody>
-        <VStack align="stretch" spacing={6}>
+    <MotionCard
+      variant="glass"
+      h="fit-content"
+      position="sticky"
+      top={24}
+      initial={{ x: -50, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
+      <CardBody p={6}>
+        <VStack align="stretch" spacing={8}>
           <Box>
-            <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="muted" mb={3}>
+            <Text fontSize="xs" fontWeight="800" textTransform="uppercase" letterSpacing="wider" color="muted" mb={4}>
               Guild
             </Text>
-            <HStack spacing={3}>
+            <HStack spacing={4}>
               <Image
                 src={guildIcon}
                 alt={guildName}
-                boxSize={12}
-                rounded="lg"
+                boxSize={14}
+                rounded="xl"
                 objectFit="cover"
-                fallback={<Box boxSize={12} rounded="lg" bg="slate.700" />}
+                fallback={
+                  <Box
+                    boxSize={14}
+                    rounded="xl"
+                    bg={useColorModeValue("slate.200", "slate.700")}
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                  >
+                    <FiShield size={24} color={useColorModeValue("#94a3b8", "#64748b")} />
+                  </Box>
+                }
+                boxShadow="0 4px 12px rgba(0, 0, 0, 0.1)"
               />
               <Box overflow="hidden">
-                <Text fontWeight="600" noOfLines={1}>
+                <Text fontWeight="700" fontSize="lg" noOfLines={1}>
                   {guildName}
                 </Text>
                 <Text fontSize="xs" color="muted" fontFamily="mono">
@@ -133,6 +158,9 @@ function Sidebar({ guild, activeTab, onTabChange }) {
             justifyContent="flex-start"
             leftIcon={<FiArrowLeft />}
             size="sm"
+            rounded="lg"
+            fontWeight="600"
+            _hover={{ bg: useColorModeValue("slate.100", "slate.800") }}
           >
             Back to Guilds
           </Button>
@@ -140,50 +168,84 @@ function Sidebar({ guild, activeTab, onTabChange }) {
           <Divider />
 
           <Box>
-            <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="muted" mb={3}>
+            <Text fontSize="xs" fontWeight="800" textTransform="uppercase" letterSpacing="wider" color="muted" mb={4}>
               Protection Pages
             </Text>
-            <VStack align="stretch" spacing={1}>
+            <VStack align="stretch" spacing={2}>
               {SETTINGS_PAGES.map((page) => (
-                <Button
-                  key={page.key}
-                  variant={activeTab === page.key ? "solid" : "ghost"}
-                  colorScheme={activeTab === page.key ? "brand" : undefined}
-                  justifyContent="flex-start"
-                  leftIcon={<Icon as={page.icon} />}
-                  size="sm"
-                  onClick={() => onTabChange(page.key)}
-                >
-                  {page.label}
-                </Button>
+                <Box key={page.key}>
+                  <Button
+                    variant={activeTab === page.key ? "solid" : "ghost"}
+                    colorScheme={activeTab === page.key ? "brand" : undefined}
+                    justifyContent="flex-start"
+                    leftIcon={<Icon as={page.icon} />}
+                    size="sm"
+                    rounded="lg"
+                    fontWeight={activeTab === page.key ? "600" : "500"}
+                    onClick={() => onTabChange(page.key)}
+                    w="full"
+                    bgGradient={
+                      activeTab === page.key
+                        ? "linear(135deg, brand.500, brand.600)"
+                        : undefined
+                    }
+                    _hover={
+                      activeTab !== page.key
+                        ? {
+                            bg: useColorModeValue("slate.100", "slate.800"),
+                          }
+                        : undefined
+                    }
+                  >
+                    {page.label}
+                  </Button>
+                </Box>
               ))}
             </VStack>
           </Box>
         </VStack>
       </CardBody>
-    </Card>
+    </MotionCard>
   );
 }
 
 function RuleCard({ rule, onEdit, onToggle, onDelete, isLoading }) {
-  const bg = useColorModeValue("white", "slate.800");
-  const borderColor = useColorModeValue("slate.200", "slate.700");
   const isEnabled = rule?.enabled !== false;
 
   return (
-    <Card bg={bg} borderColor={borderColor} borderWidth="1px">
-      <CardBody>
-        <VStack align="stretch" spacing={3}>
+    <MotionCard
+      variant={isEnabled ? "elevated" : "outline"}
+      borderWidth="2px"
+      borderColor={isEnabled ? "accent.500" : useColorModeValue("slate.200", "slate.700")}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.2 }}
+    >
+      <CardBody p={5}>
+        <VStack align="stretch" spacing={4}>
           <Flex justify="space-between" align="center">
-            <Heading size="sm">{rule?.name || "Unnamed Rule"}</Heading>
-            <Badge colorScheme={isEnabled ? "accent" : "gray"}>
+            <Heading size="sm" fontWeight="700">
+              {rule?.name || "Unnamed Rule"}
+            </Heading>
+            <Badge
+              colorScheme={isEnabled ? "accent" : "gray"}
+              variant={isEnabled ? "solid" : "subtle"}
+              rounded="full"
+              px={3}
+              boxShadow={isEnabled ? "0 4px 10px rgba(34, 197, 94, 0.3)" : undefined}
+            >
               {isEnabled ? "Enabled" : "Disabled"}
             </Badge>
           </Flex>
 
-          <HStack spacing={4} fontSize="sm" color="muted">
-            <Text>Action: {formatActionLabel(rule?.action)}</Text>
-            <Text>Severity: {rule?.severity || 2}/3</Text>
+          <HStack spacing={4} fontSize="sm" color="muted" fontWeight="500">
+            <Text>
+              <Box as="span" color={useColorModeValue("slate.600", "slate.400")}>Action:</Box>{" "}
+              {formatActionLabel(rule?.action)}
+            </Text>
+            <Text>
+              <Box as="span" color={useColorModeValue("slate.600", "slate.400")}>Severity:</Box>{" "}
+              {rule?.severity || 2}/3
+            </Text>
           </HStack>
 
           <HStack spacing={2} pt={2}>
@@ -192,32 +254,46 @@ function RuleCard({ rule, onEdit, onToggle, onDelete, isLoading }) {
               leftIcon={<FiEdit2 />}
               onClick={() => onEdit(rule)}
               isDisabled={isLoading}
+              rounded="lg"
+              fontWeight="600"
+              variant="outline"
+              borderWidth="2px"
             >
               Edit
             </Button>
             <Button
               size="sm"
               leftIcon={isEnabled ? <FiToggleLeft /> : <FiToggleRight />}
-              variant="outline"
+              variant={isEnabled ? "outline" : "solid"}
+              colorScheme={isEnabled ? "gray" : "accent"}
               onClick={() => onToggle(rule)}
               isLoading={isLoading}
+              rounded="lg"
+              fontWeight="600"
             >
               {isEnabled ? "Disable" : "Enable"}
             </Button>
-            <Button
-              size="sm"
-              leftIcon={<FiTrash2 />}
-              colorScheme="danger"
-              variant="ghost"
-              onClick={() => onDelete(rule)}
-              isLoading={isLoading}
-            >
-              Delete
-            </Button>
+            <MotionBox whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                size="sm"
+                leftIcon={<FiTrash2 />}
+                colorScheme="danger"
+                variant="ghost"
+                onClick={() => onDelete(rule)}
+                isLoading={isLoading}
+                rounded="lg"
+                fontWeight="600"
+                _hover={{
+                  bg: useColorModeValue("danger.50", "danger.900"),
+                }}
+              >
+                Delete
+              </Button>
+            </MotionBox>
           </HStack>
         </VStack>
       </CardBody>
-    </Card>
+    </MotionCard>
   );
 }
 
@@ -615,6 +691,17 @@ function AutoModTab({ guildId }) {
   );
 }
 
+// Image moderation filter definitions
+const IMAGE_FILTERS = [
+  { id: "general", name: "General", description: "Safe, general audience content", defaultThreshold: 0.2 },
+  { id: "sensitive", name: "Sensitive", description: "Mildly suggestive content", defaultThreshold: 0.8 },
+  { id: "questionable", name: "Questionable", description: "Suggestive or borderline content", defaultThreshold: 0.2 },
+  { id: "explicit", name: "Explicit", description: "Adult or explicit content", defaultThreshold: 0.2 },
+  { id: "guro", name: "Gore", description: "Graphic or violent content", defaultThreshold: 0.3 },
+  { id: "realistic", name: "Realistic", description: "Photorealistic explicit content", defaultThreshold: 0.25 },
+  { id: "csam_check", name: "CSAM Check", description: "Child safety check (strict)", defaultThreshold: 0.09 },
+];
+
 function AIModerationTab({ guildId }) {
   const [settings, setSettings] = useState({
     enabled: false,
@@ -626,6 +713,13 @@ function AIModerationTab({ guildId }) {
     action: "delete",
     severity: 2,
     log_only_mode: false,
+    image_moderation: {
+      enabled: false,
+      scan_attachments: true,
+      scan_embeds: true,
+      filters: {},
+      log_only_mode: false,
+    },
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -644,6 +738,13 @@ function AIModerationTab({ guildId }) {
         action: data?.action ?? "delete",
         severity: data?.severity ?? 2,
         log_only_mode: data?.log_only_mode ?? false,
+        image_moderation: data?.image_moderation ?? {
+          enabled: false,
+          scan_attachments: true,
+          scan_embeds: true,
+          filters: {},
+          log_only_mode: false,
+        },
       });
     } catch (error) {
       toast({ title: "Error loading AI moderation settings", description: error.message, status: "error" });
@@ -676,6 +777,22 @@ function AIModerationTab({ guildId }) {
         [catId]: {
           ...prev.categories[catId],
           [field]: value,
+        },
+      },
+    }));
+  };
+
+  const updateImageFilter = (filterId, field, value) => {
+    setSettings((prev) => ({
+      ...prev,
+      image_moderation: {
+        ...prev.image_moderation,
+        filters: {
+          ...prev.image_moderation.filters,
+          [filterId]: {
+            ...prev.image_moderation.filters[filterId],
+            [field]: value,
+          },
         },
       },
     }));
@@ -859,6 +976,156 @@ function AIModerationTab({ guildId }) {
             >
               Save AI Moderation Settings
             </Button>
+          </VStack>
+        </CardBody>
+      </Card>
+
+      {/* Image Moderation Section */}
+      <Card>
+        <CardBody>
+          <VStack align="stretch" spacing={6}>
+            <Flex justify="space-between" align="center">
+              <Box>
+                <Heading size="md">Image Moderation</Heading>
+                <Text color="muted" fontSize="sm">
+                  AI-powered detection of inappropriate images
+                </Text>
+              </Box>
+              <FormControl display="flex" alignItems="center" w="auto">
+                <FormLabel mb={0} mr={3}>
+                  Enable Image Moderation
+                </FormLabel>
+                <Switch
+                  isChecked={settings.image_moderation?.enabled || false}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      image_moderation: { ...prev.image_moderation, enabled: e.target.checked },
+                    }))
+                  }
+                />
+              </FormControl>
+            </Flex>
+
+            <Divider />
+
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              <FormControl display="flex" alignItems="center">
+                <Checkbox
+                  isChecked={settings.image_moderation?.scan_attachments ?? true}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      image_moderation: { ...prev.image_moderation, scan_attachments: e.target.checked },
+                    }))
+                  }
+                  isDisabled={!settings.image_moderation?.enabled}
+                >
+                  Scan Message Attachments
+                </Checkbox>
+              </FormControl>
+
+              <FormControl display="flex" alignItems="center">
+                <Checkbox
+                  isChecked={settings.image_moderation?.scan_embeds ?? true}
+                  onChange={(e) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      image_moderation: { ...prev.image_moderation, scan_embeds: e.target.checked },
+                    }))
+                  }
+                  isDisabled={!settings.image_moderation?.enabled}
+                >
+                  Scan Embedded Images
+                </Checkbox>
+              </FormControl>
+            </SimpleGrid>
+
+            <FormControl display="flex" alignItems="center">
+              <Checkbox
+                isChecked={settings.image_moderation?.log_only_mode || false}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    image_moderation: { ...prev.image_moderation, log_only_mode: e.target.checked },
+                  }))
+                }
+                isDisabled={!settings.image_moderation?.enabled}
+              >
+                Log Only Mode (no actions taken on images)
+              </Checkbox>
+            </FormControl>
+
+            <Divider />
+
+            <Heading size="sm">Image Detection Filters</Heading>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              {IMAGE_FILTERS.map((filter) => {
+                const filterSettings = settings.image_moderation?.filters?.[filter.id] || {
+                  enabled: false,
+                  threshold: filter.defaultThreshold,
+                  action: "delete",
+                };
+                return (
+                  <Card key={filter.id} variant="outline">
+                    <CardBody py={3}>
+                      <VStack align="stretch" spacing={2}>
+                        <Flex justify="space-between" align="center">
+                          <FormControl display="flex" alignItems="center" w="auto" mb={0}>
+                            <Checkbox
+                              isChecked={filterSettings.enabled}
+                              onChange={(e) => updateImageFilter(filter.id, "enabled", e.target.checked)}
+                              isDisabled={!settings.image_moderation?.enabled}
+                            />
+                            <FormLabel mb={0} ml={2} fontWeight="600">
+                              {filter.name}
+                            </FormLabel>
+                          </FormControl>
+                        </Flex>
+                        <Text fontSize="xs" color="muted" pl={6}>
+                          {filter.description}
+                        </Text>
+                        <SimpleGrid columns={2} spacing={2} pl={6}>
+                          <FormControl>
+                            <FormLabel fontSize="xs">Threshold</FormLabel>
+                            <NumberInput
+                              value={filterSettings.threshold}
+                              onChange={(_, val) => updateImageFilter(filter.id, "threshold", val)}
+                              min={0}
+                              max={1}
+                              step={0.01}
+                              isDisabled={!settings.image_moderation?.enabled || !filterSettings.enabled}
+                              size="sm"
+                            >
+                              <NumberInputField />
+                              <NumberInputStepper>
+                                <NumberIncrementStepper />
+                                <NumberDecrementStepper />
+                              </NumberInputStepper>
+                            </NumberInput>
+                          </FormControl>
+                          <FormControl>
+                            <FormLabel fontSize="xs">Action</FormLabel>
+                            <Select
+                              value={filterSettings.action}
+                              onChange={(e) => updateImageFilter(filter.id, "action", e.target.value)}
+                              isDisabled={!settings.image_moderation?.enabled || !filterSettings.enabled}
+                              size="sm"
+                            >
+                              {RULE_ACTION_OPTIONS.filter((a) => a !== "no_action").map((action) => (
+                                <option key={action} value={action}>
+                                  {formatActionLabel(action)}
+                                </option>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </SimpleGrid>
+                      </VStack>
+                    </CardBody>
+                  </Card>
+                );
+              })}
+            </SimpleGrid>
           </VStack>
         </CardBody>
       </Card>
@@ -1179,16 +1446,20 @@ export function GuildDashboardPage() {
   }
 
   return (
-    <Grid templateColumns={{ base: "1fr", lg: "280px 1fr" }} gap={6} alignItems="start">
+    <Grid templateColumns={{ base: "1fr", lg: "280px 1fr" }} gap={8} alignItems="start">
       <Sidebar guild={guild} activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <Box>
+      <MotionBox
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
         {activeTab === "automod" && <AutoModTab guildId={guildId} />}
         {activeTab === "antispam" && <ProtectionTab guildId={guildId} type="antispam" />}
         {activeTab === "antiraid" && <ProtectionTab guildId={guildId} type="antiraid" />}
         {activeTab === "antinuke" && <ProtectionTab guildId={guildId} type="antinuke" />}
         {activeTab === "aimod" && <AIModerationTab guildId={guildId} />}
-      </Box>
+      </MotionBox>
     </Grid>
   );
 }

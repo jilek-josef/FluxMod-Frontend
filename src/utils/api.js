@@ -156,6 +156,21 @@ const MOCK_LHS_SETTINGS = {
   severity: 2,
   log_only_mode: false,
   channel_overrides: {},
+  image_moderation: {
+    enabled: false,
+    scan_attachments: true,
+    scan_embeds: true,
+    filters: {
+      general: { enabled: false, threshold: 0.2, action: "delete" },
+      sensitive: { enabled: false, threshold: 0.8, action: "delete" },
+      questionable: { enabled: false, threshold: 0.2, action: "delete" },
+      explicit: { enabled: false, threshold: 0.2, action: "delete" },
+      guro: { enabled: false, threshold: 0.3, action: "delete" },
+      realistic: { enabled: false, threshold: 0.25, action: "delete" },
+      csam_check: { enabled: false, threshold: 0.09, action: "ban" },
+    },
+    log_only_mode: false,
+  },
 };
 
 export async function getGuildRules(guildId) {
